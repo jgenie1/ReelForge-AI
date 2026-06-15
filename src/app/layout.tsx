@@ -1,18 +1,18 @@
 import type { Metadata } from "next";
-import { Inter, Syne } from "next/font/google";
+import { Plus_Jakarta_Sans, Outfit } from "next/font/google";
 import { ClerkProvider } from "@clerk/nextjs";
 import { LanguageProvider } from "@/context/LanguageContext";
 import "./globals.css";
 
-const inter = Inter({
+const plusJakarta = Plus_Jakarta_Sans({
   subsets: ["latin"],
-  variable: "--font-inter",
+  variable: "--font-plus-jakarta",
 });
 
-const syne = Syne({
+const outfit = Outfit({
   subsets: ["latin"],
-  weight: ["400", "700", "800"],
-  variable: "--font-syne",
+  weight: ["300", "400", "500", "600", "700", "800", "900"],
+  variable: "--font-outfit",
 });
 
 export const metadata: Metadata = {
@@ -37,7 +37,7 @@ export default function RootLayout({
   const content = (
     <html lang="en" className="dark">
       <body
-        className={`${inter.variable} ${syne.variable} font-sans min-h-screen bg-background text-gray-100 antialiased flex flex-col`}
+        className={`${plusJakarta.variable} ${outfit.variable} font-sans min-h-screen bg-background text-gray-100 antialiased flex flex-col`}
       >
         <LanguageProvider>
           {children}
