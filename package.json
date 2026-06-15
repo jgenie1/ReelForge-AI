@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3080",
     "build": "next build",
-    "start": "next start -p 3080",
+    "start": "node server.js",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
