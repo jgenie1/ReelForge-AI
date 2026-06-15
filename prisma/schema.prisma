@@ -1,0 +1,207 @@
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum SubscriptionPlan {
+  FREE
+  STARTER
+  CREATOR
+  PRO
+  AGENCE
+}
+
+enum VideoStatus {
+  PENDING
+  SCRIPT_DONE
+  VOICE_DONE
+  IMAGES_DONE
+  CAPTIONS_DONE
+  RENDERING
+  COMPLETED
+  FAILED
+}
+
+enum JobType {
+  SINGLE_VIDEO
+  SERIES_VIDEO
+}
+
+enum Platform {
+  TIKTOK
+  INSTAGRAM
+  YOUTUBE
+  PINTEREST
+  SNAPCHAT
+  X
+}
+
+enum VoiceStatus {
+  PROCESSING
+  READY
+  FAILED
+}
+
+model User {
+  id             String         @id @default(uuid())
+  email          String         @unique
+  clerkId        String         @unique
+  credits        Int            @default(10) // Starter gets 10, free get 3 or similar
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
+  
+  subscription   Subscription?
+  creditsLogs    CreditsLog[]
+  videos         Video[]
+  series         Series[]
+  channels       Channel[]
+  templates      Template[]
+  marketplaceBuy MarketplaceListing[] @relation("BuyerRelation")
+  voiceClones    VoiceClone[]
+}
+
+model Subscription {
+  id                     String           @id @default(uuid())
+  userId                 String           @unique
+  user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  plan                   SubscriptionPlan @default(FREE)
+  status                 String           // "active", "canceled", "incomplete"
+  stripeSubscriptionId   String?          @unique
+  stripeCustomerId       String?
+  currentPeriodEnd       DateTime?
+  createdAt              DateTime         @default(now())
+  updatedAt              DateTime         @updatedAt
+}
+
+model CreditsLog {
+  id             String   @id @default(uuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  creditsChanged Int      // e.g. -1 for video, +50 for pack purchase
+  reason         String   // "VIDEO_GENERATION", "PACK_PURCHASE", "REFUND"
+  createdAt      DateTime @default(now())
+}
+
+model Video {
+  id             String               @id @default(uuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title          String
+  script         String               @db.Text
+  niche          String
+  style          String               // Anime, Realistic, Illustration, etc.
+  tone           String               // Mysterious, Educational, Inspiring, etc.
+  duration       Int                  // in seconds: 15, 30, 45, 60, 90
+  language       String               // French, Haitian Creole, English, etc.
+  
+  status         VideoStatus          @default(PENDING)
+  videoUrl       String?              // R2 url
+  voiceUrl       String?              // ElevenLabs or offline audio url
+  subtitles      Json?                // Whisper timestamps & words JSON
+  musicUrl       String?              // Suno / stock background music
+  
+  viralScore     Int?                 // 0-100 score
+  suggestions    Json?                // Array of hook suggestions / script improvements
+  
+  seriesId       String?
+  series         Series?              @relation(fields: [seriesId], references: [id], onDelete: SetNull)
+  
+  jobs           VideoJob[]
+  analytics      AnalyticsSnapshot[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model VideoJob {
+  id          String      @id @default(uuid())
+  videoId     String
+  video       Video       @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  jobType     JobType     @default(SINGLE_VIDEO)
+  progress    Int         @default(0) // 0-100 percentage
+  status      VideoStatus @default(PENDING)
+  error       String?     @db.Text
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+}
+
+model Series {
+  id            String    @id @default(uuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name          String
+  niche         String
+  videoCount    Int
+  intervalHours Int       @default(24)
+  status        String    @default("ACTIVE") // "ACTIVE", "COMPLETED", "PAUSED"
+  videos        Video[]
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+}
+
+model Channel {
+  id             String    @id @default(uuid())
+  userId         String
+  user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  platform       Platform
+  accountName    String
+  accessToken    String    @db.Text
+  refreshToken   String?   @db.Text
+  tokenExpiresAt DateTime?
+  watermarkUrl   String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+}
+
+model Template {
+  id             String               @id @default(uuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  previewUrl     String?
+  remotionConfig Json                 // Style parameters (fonts, colors, transitions)
+  priceCredits   Int                  @default(0) // 0 for free
+  isPublic       Boolean              @default(false)
+  rating         Float                @default(5.0)
+  listings       MarketplaceListing[]
+  createdAt      DateTime             @default(now())
+  updatedAt      DateTime             @updatedAt
+}
+
+model MarketplaceListing {
+  id          String   @id @default(uuid())
+  templateId  String
+  template    Template @relation(fields: [templateId], references: [id], onDelete: Cascade)
+  sellerId    String
+  buyerId     String?
+  buyer       User?    @relation("BuyerRelation", fields: [buyerId], references: [id], onDelete: SetNull)
+  priceCredits Int
+  status      String   @default("AVAILABLE") // "AVAILABLE", "SOLD"
+  createdAt   DateTime @default(now())
+}
+
+model AnalyticsSnapshot {
+  id          String   @id @default(uuid())
+  videoId     String
+  video       Video    @relation(fields: [videoId], references: [id], onDelete: Cascade)
+  views       Int      @default(0)
+  likes       Int      @default(0)
+  shares      Int      @default(0)
+  comments    Int      @default(0)
+  recordedAt  DateTime @default(now())
+}
+
+model VoiceClone {
+  id        String      @id @default(uuid())
+  userId    String
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  voiceId   String      @unique // ElevenLabs voice ID
+  name      String
+  sampleUrl String
+  status    VoiceStatus @default(PROCESSING)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+}
