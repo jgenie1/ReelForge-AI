@@ -1,131 +1,21 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "../lib/db";
 import { connectionOptions } from "../lib/queue";
+import { uploadToR2 } from "../lib/storage";
+import { exec } from "child_process";
+import fs from "fs";
+import path from "path";
+import os from "os";
 
-// Simple sleep helper for simulating pipeline latency
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
-
-/**
- * MOCK PIPELINE RUNNER (For offline development and tests)
- * Emulates the 8 steps of short video generation in ~8 seconds.
- */
-export async function runMockPipeline(videoId: string) {
-  console.log(`[MOCK WORKER] Starting generation pipeline for Video ${videoId}...`);
-  
-  try {
-    // 0. Initial Status
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { status: "PENDING" }
-    });
-    await createJobProgress(videoId, "PENDING", 5);
-    await sleep(1000);
-
-    // 1. Generate Script (Claude API mockup)
-    console.log(`[MOCK WORKER] Step 1/8: GenerateScript...`);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        status: "SCRIPT_DONE",
-        script: "HOOK: Le savais-tu ? Sous le sable du désert du Sahara repose un secret terrifiant. NARRATION: Il y a 5000 ans, cette zone était recouverte d'un lac gigantesque. Des créatures marines de plus de 15 mètres y régnaient en maîtres. CTA: Abonne-toi pour découvrir la suite des mystères de l'histoire !",
-        viralScore: 84,
-        suggestions: [
-          "Le titre d'accroche 'Le secret terrifiant du Sahara' a un fort taux de clic.",
-          "Augmenter l'emphase dramatique sur la taille des créatures marines."
-        ]
-      }
-    });
-    await createJobProgress(videoId, "SCRIPT_DONE", 15);
-    await sleep(1000);
-
-    // 2. Generate Voice (ElevenLabs mockup)
-    console.log(`[MOCK WORKER] Step 2/8: GenerateVoice...`);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        status: "VOICE_DONE",
-        voiceUrl: "https://pub-reelforge.r2.dev/mock-voiceover.mp3"
-      }
-    });
-    await createJobProgress(videoId, "VOICE_DONE", 30);
-    await sleep(1000);
-
-    // 3. Generate Images (SDXL / Pexels mockup)
-    console.log(`[MOCK WORKER] Step 3/8: GenerateImages...`);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        status: "IMAGES_DONE"
-      }
-    });
-    await createJobProgress(videoId, "IMAGES_DONE", 45);
-    await sleep(1000);
-
-    // 4. Generate Captions (Whisper sync mockup)
-    console.log(`[MOCK WORKER] Step 4/8: GenerateCaptions...`);
-    const mockSubtitles = [
-      { word: "Le", start: 0.1, end: 0.4 },
-      { word: "savais-tu", start: 0.5, end: 1.1 },
-      { word: "Sous", start: 1.2, end: 1.6 },
-      { word: "le", start: 1.7, end: 1.9 },
-      { word: "sable", start: 2.0, end: 2.5 },
-      { word: "du", start: 2.6, end: 2.8 },
-      { word: "désert", start: 2.9, end: 3.4 },
-      { word: "terrifiant.", start: 3.5, end: 4.5 }
-    ];
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        status: "CAPTIONS_DONE",
-        subtitles: mockSubtitles
-      }
-    });
-    await createJobProgress(videoId, "CAPTIONS_DONE", 60);
-    await sleep(1000);
-
-    // 5. Generate Music (Suno / Library mockup)
-    console.log(`[MOCK WORKER] Step 5/8: GenerateMusic...`);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        musicUrl: "https://pub-reelforge.r2.dev/mock-background-ambient.mp3"
-      }
-    });
-    await createJobProgress(videoId, "RENDERING", 75);
-    await sleep(1000);
-
-    // 6. Render Video (Remotion / FFmpeg mockup)
-    console.log(`[MOCK WORKER] Step 6/8: RenderVideo...`);
-    await createJobProgress(videoId, "RENDERING", 90);
-    await sleep(1500);
-
-    // 7. Upload & Complete
-    console.log(`[MOCK WORKER] Step 7-8: UploadToR2 & Publish...`);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { 
-        status: "COMPLETED",
-        videoUrl: "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4"
-      }
-    });
-    await createJobProgress(videoId, "COMPLETED", 100);
-    console.log(`[MOCK WORKER] Pipeline completed successfully for Video ${videoId}!`);
-
-  } catch (error: any) {
-    console.error(`[MOCK WORKER] Pipeline failed for Video ${videoId}:`, error);
-    await prisma.video.update({
-      where: { id: videoId },
-      data: { status: "FAILED" }
-    });
-    await createJobProgress(videoId, "FAILED", 100, error?.message || "Unknown error");
-  }
+export interface SubtitleWord {
+  word: string;
+  start: number;
+  end: number;
 }
 
-/**
- * Creates or updates the status log of a VideoJob
- */
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 async function createJobProgress(videoId: string, status: any, progress: number, error: string | null = null) {
-  // Check if job exists
   const existingJob = await prisma.videoJob.findFirst({
     where: { videoId }
   });
@@ -147,10 +37,333 @@ async function createJobProgress(videoId: string, status: any, progress: number,
   }
 }
 
-/**
- * PRODUCTION BULLMQ WORKER
- * Connects to the Redis queue and handles background jobs.
- */
+// 1. Claude script generation helper
+async function callClaudeAPI(
+  topic: string,
+  niche: string,
+  tone: string,
+  duration: number,
+  language: string
+): Promise<string> {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+  }
+
+  const prompt = `Write a short narration script for a 9:16 vertical video of approximately ${duration} seconds in the "${niche}" niche.
+Subject/Topic: ${topic}
+Tone: ${tone}
+Language: ${language}
+
+Requirements:
+- Output ONLY the voiceover narrative text.
+- Do NOT include any scene descriptions, stage directions, bracketed comments, tags, or formatting.
+- The script should be engaging, formatted as a continuous spoken paragraph, and fit the ${duration}-second limit.`;
+
+  const response = await fetch("https://api.anthropic.com/v1/messages", {
+    method: "POST",
+    headers: {
+      "x-api-key": apiKey,
+      "anthropic-version": "2023-06-01",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "claude-3-haiku-20240307",
+      max_tokens: 1000,
+      messages: [{ role: "user", content: prompt }],
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Claude API error: ${response.statusText} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const text = data.content?.[0]?.text;
+  if (!text) {
+    throw new Error("No script text returned from Claude API");
+  }
+
+  return text.trim();
+}
+
+// 2. ElevenLabs TTS helper
+async function callElevenLabsTTS(script: string, voice: string): Promise<Buffer> {
+  const apiKey = process.env.ELEVENLABS_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing ELEVENLABS_API_KEY environment variable");
+  }
+
+  const voiceId = voice || "pNInz6obpg75paPuuFc7"; // default Adam voice
+
+  const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+    method: "POST",
+    headers: {
+      "xi-api-key": apiKey,
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({
+      text: script,
+      model_id: "eleven_multilingual_v2",
+      voice_settings: {
+        stability: 0.5,
+        similarity_boost: 0.75,
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`ElevenLabs API error: ${response.statusText} - ${errorText}`);
+  }
+
+  const arrayBuffer = await response.arrayBuffer();
+  return Buffer.from(arrayBuffer);
+}
+
+// Helper to segment the script for image prompts
+function segmentScript(script: string, count: number = 3): string[] {
+  const sentences = script.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+  if (sentences.length <= count) {
+    return sentences;
+  }
+  const segments: string[] = [];
+  const chunkSize = Math.ceil(sentences.length / count);
+  for (let i = 0; i < sentences.length; i += chunkSize) {
+    segments.push(sentences.slice(i, i + chunkSize).join(". "));
+  }
+  return segments.slice(0, count);
+}
+
+// 3. Replicate SDXL image generation helpers
+async function generateSingleImage(promptText: string, style: string): Promise<string> {
+  const apiKey = process.env.REPLICATE_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing REPLICATE_API_KEY environment variable");
+  }
+
+  const styledPrompt = `${promptText}, ${style} style, 9:16 portrait ratio, highly detailed, cinematic lighting, 8k resolution`;
+
+  const response = await fetch("https://api.replicate.com/v1/models/stability-ai/sdxl/predictions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Token ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      input: {
+        prompt: styledPrompt,
+        negative_prompt: "text, watermark, logo, blurry, ugly, deformed, bad anatomy",
+        aspect_ratio: "9:16",
+      },
+    }),
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`Replicate API error: ${response.statusText} - ${errorText}`);
+  }
+
+  const prediction = await response.json();
+  const pollUrl = prediction.urls.get;
+
+  let status = prediction.status;
+  let resultUrl = "";
+  const startTime = Date.now();
+  const timeout = 60000;
+
+  while (status !== "succeeded" && status !== "failed" && status !== "canceled") {
+    if (Date.now() - startTime > timeout) {
+      throw new Error("Replicate image generation timed out");
+    }
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const pollResponse = await fetch(pollUrl, {
+      headers: { "Authorization": `Token ${apiKey}` },
+    });
+    const pollData = await pollResponse.json();
+    status = pollData.status;
+    if (status === "succeeded") {
+      resultUrl = pollData.output[0];
+    } else if (status === "failed" || status === "canceled") {
+      throw new Error(`Replicate prediction failed: ${pollData.error}`);
+    }
+  }
+
+  return resultUrl;
+}
+
+async function callSDXLAPI(script: string, style: string): Promise<string[]> {
+  const segments = segmentScript(script, 3);
+  console.log(`[WORKER] Generating ${segments.length} images in parallel via Replicate...`);
+  return Promise.all(
+    segments.map((promptText, idx) => {
+      console.log(`[WORKER] Starting image generation ${idx + 1}/${segments.length}`);
+      return generateSingleImage(promptText, style);
+    })
+  );
+}
+
+// 4. OpenAI Whisper word-level timestamps helper
+async function callWhisperTranscription(audioBuffer: Buffer): Promise<SubtitleWord[]> {
+  const apiKey = process.env.OPENAI_API_KEY;
+  if (!apiKey) {
+    throw new Error("Missing OPENAI_API_KEY environment variable");
+  }
+
+  const formData = new FormData();
+  const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: "audio/mpeg" });
+  formData.append("file", audioBlob, "voiceover.mp3");
+  formData.append("model", "whisper-1");
+  formData.append("response_format", "verbose_json");
+  formData.append("timestamp_granularities[]", "word");
+
+  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${apiKey}`,
+    },
+    body: formData,
+  });
+
+  if (!response.ok) {
+    const errorText = await response.text();
+    throw new Error(`OpenAI Whisper API error: ${response.statusText} - ${errorText}`);
+  }
+
+  const data = await response.json();
+  const words = data.words;
+  if (!words || !Array.isArray(words)) {
+    throw new Error("Whisper API did not return word-level timestamps");
+  }
+
+  return words.map((w: any) => ({
+    word: w.word,
+    start: w.start,
+    end: w.end,
+  }));
+}
+
+// 5. Remotion CLI rendering helper
+async function renderRemotionVideo(
+  imageUrls: string[],
+  voiceUrl: string,
+  subtitles: SubtitleWord[],
+  videoId: string
+): Promise<string> {
+  const tempDir = os.tmpdir();
+  const propsPath = path.join(tempDir, `props-${videoId}.json`);
+  const outputPath = path.join(tempDir, `rendered-${videoId}.mp4`);
+
+  const props = {
+    imageUrls,
+    voiceUrl,
+    subtitles,
+    musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+    voiceVolume: 1.0,
+    musicVolume: 0.15
+  };
+
+  fs.writeFileSync(propsPath, JSON.stringify(props));
+
+  const lastWord = subtitles[subtitles.length - 1];
+  const durationInSeconds = lastWord ? Math.ceil(lastWord.end + 1.5) : 30;
+  const durationInFrames = Math.min(1800, durationInSeconds * 30); // Cap at 60s @ 30fps
+
+  const command = `npx remotion render src/remotion/Root.tsx ReelForgeTemplate "${outputPath}" --props="${propsPath}" --duration=${durationInFrames}`;
+  console.log(`[WORKER] Executing Remotion render: ${command}`);
+
+  return new Promise((resolve, reject) => {
+    exec(command, { cwd: process.cwd() }, (error, stdout, stderr) => {
+      if (error) {
+        console.error("❌ Remotion render command failed:", error);
+        console.error("stderr:", stderr);
+        reject(new Error(`Remotion CLI error: ${error.message}`));
+        return;
+      }
+      console.log("[WORKER] Remotion render completed successfully.");
+      try {
+        fs.unlinkSync(propsPath);
+      } catch (e) {
+        console.warn("⚠️ Failed to clean up props file:", e);
+      }
+      resolve(outputPath);
+    });
+  });
+}
+
+// 6. Mock pipeline fallback
+export async function runMockPipeline(videoId: string) {
+  console.log(`[MOCK WORKER] Starting generation pipeline for Video ${videoId}...`);
+  try {
+    await prisma.video.update({ where: { id: videoId }, data: { status: "PENDING" } });
+    await createJobProgress(videoId, "PENDING", 5);
+    await sleep(1000);
+
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { 
+        status: "SCRIPT_DONE",
+        script: "HOOK: Le savais-tu ? Sous le sable du désert du Sahara repose un secret terrifiant. NARRATION: Il y a 5000 ans, cette zone était recouverte d'un lac gigantesque. Des créatures marines de plus de 15 mètres y régnaient en maîtres. CTA: Abonne-toi pour découvrir la suite des mystères de l'histoire !",
+        viralScore: 84,
+        suggestions: [
+          "Le titre d'accroche 'Le secret terrifiant du Sahara' a un fort taux de clic.",
+          "Augmenter l'emphase dramatique sur la taille des créatures marines."
+        ]
+      }
+    });
+    await createJobProgress(videoId, "SCRIPT_DONE", 15);
+    await sleep(1000);
+
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: "VOICE_DONE", voiceUrl: "https://pub-reelforge.r2.dev/mock-voiceover.mp3" }
+    });
+    await createJobProgress(videoId, "VOICE_DONE", 30);
+    await sleep(1000);
+
+    await prisma.video.update({ where: { id: videoId }, data: { status: "IMAGES_DONE" } });
+    await createJobProgress(videoId, "IMAGES_DONE", 45);
+    await sleep(1000);
+
+    const mockSubtitles = [
+      { word: "Le", start: 0.1, end: 0.4 },
+      { word: "savais-tu", start: 0.5, end: 1.1 },
+      { word: "Sous", start: 1.2, end: 1.6 },
+      { word: "le", start: 1.7, end: 1.9 },
+      { word: "sable", start: 2.0, end: 2.5 },
+      { word: "du", start: 2.6, end: 2.8 },
+      { word: "désert", start: 2.9, end: 3.4 },
+      { word: "terrifiant.", start: 3.5, end: 4.5 }
+    ];
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: "CAPTIONS_DONE", subtitles: mockSubtitles as any }
+    });
+    await createJobProgress(videoId, "CAPTIONS_DONE", 60);
+    await sleep(1000);
+
+    await prisma.video.update({ data: { musicUrl: "https://pub-reelforge.r2.dev/mock-background-ambient.mp3" }, where: { id: videoId } });
+    await createJobProgress(videoId, "RENDERING", 75);
+    await sleep(1000);
+
+    await createJobProgress(videoId, "RENDERING", 90);
+    await sleep(1500);
+
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: "COMPLETED", videoUrl: "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4" }
+    });
+    await createJobProgress(videoId, "COMPLETED", 100);
+    console.log(`[MOCK WORKER] Pipeline completed successfully for Video ${videoId}!`);
+  } catch (error: any) {
+    console.error(`[MOCK WORKER] Pipeline failed for Video ${videoId}:`, error);
+    await prisma.video.update({ where: { id: videoId }, data: { status: "FAILED" } });
+    await createJobProgress(videoId, "FAILED", 100, error?.message || "Unknown error");
+  }
+}
+
 let worker: Worker | null = null;
 
 if (process.env.NODE_ENV !== "test") {
@@ -166,79 +379,109 @@ if (process.env.NODE_ENV !== "test") {
           return { status: "success", mock: true };
         }
 
-        // --- ACTUAL PRODUCTION PIPELINE STEPS ---
         try {
-          // JOB_1: Generate Script (Claude API)
-          await job.updateProgress(10);
-          console.log("Calling Claude API for script writing...");
-          // const script = await callClaudeAPI(topic, niche, tone, duration, language);
-          
-          // JOB_2: Generate Voice (ElevenLabs TTS)
-          await job.updateProgress(30);
-          console.log("Calling ElevenLabs API for voiceover audio generation...");
-          // const voiceUrl = await callElevenLabsTTS(script, voice);
-
-          // JOB_3: Generate Images (SDXL via Replicate / Runpod)
-          await job.updateProgress(50);
-          console.log("Calling SDXL via Replicate API for visual frames...");
-          // const imageUrls = await callSDXLAPI(script, style);
-
-          // JOB_4: Generate Captions / Transcription (Whisper API)
-          await job.updateProgress(70);
-          console.log("Calling Whisper API for subtitles word-by-word alignment...");
-          // const subtitles = await callWhisperTranscription(voiceUrl);
-
-          // JOB_5: Render Video (Remotion / FFmpeg rendering)
-          await job.updateProgress(85);
-          console.log("Rendering video composition with Remotion Node rendering CLI...");
-          // const localVideoPath = await renderRemotionVideo(imageUrls, voiceUrl, subtitles);
-
-          // JOB_6: Upload to Cloudflare R2
-          await job.updateProgress(95);
-          console.log("Uploading rendered MP4 to Cloudflare R2 bucket...");
-          // const finalVideoUrl = await uploadToR2(localVideoPath);
-
-          // Update DB as completed
+          // 1. Generate Script
+          console.log(`[WORKER] Step 1: Generating script via Claude...`);
+          const script = await callClaudeAPI(topic, niche, tone, duration, language);
           await prisma.video.update({
             where: { id: videoId },
-            data: {
-              status: "COMPLETED",
-              // videoUrl: finalVideoUrl,
-            }
+            data: { script, status: "SCRIPT_DONE", viralScore: Math.floor(Math.random() * 20) + 75 }
+          });
+          await createJobProgress(videoId, "SCRIPT_DONE", 15);
+          await job.updateProgress(15);
+
+          // 2. Generate Voice
+          console.log(`[WORKER] Step 2: Synthesizing voice via ElevenLabs...`);
+          const voiceBuffer = await callElevenLabsTTS(script, voice);
+          const voiceKey = `voices/voice-${videoId}.mp3`;
+          const voiceUrl = await uploadToR2(voiceBuffer, voiceKey, "audio/mpeg");
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { voiceUrl, status: "VOICE_DONE" }
+          });
+          await createJobProgress(videoId, "VOICE_DONE", 30);
+          await job.updateProgress(30);
+
+          // 3. Generate Images
+          console.log(`[WORKER] Step 3: Generating images via SDXL...`);
+          const imageUrls = await callSDXLAPI(script, style);
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { status: "IMAGES_DONE" }
+          });
+          await createJobProgress(videoId, "IMAGES_DONE", 45);
+          await job.updateProgress(45);
+
+          // 4. Generate Subtitles
+          console.log(`[WORKER] Step 4: Transcribing voice via Whisper...`);
+          const subtitles = await callWhisperTranscription(voiceBuffer);
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { subtitles: subtitles as any, status: "CAPTIONS_DONE" }
+          });
+          await createJobProgress(videoId, "CAPTIONS_DONE", 60);
+          await job.updateProgress(60);
+
+          // 5. Render Video Composition
+          console.log(`[WORKER] Step 5: Rendering video using Remotion CLI...`);
+          const localVideoPath = await renderRemotionVideo(imageUrls, voiceUrl, subtitles, videoId);
+          await createJobProgress(videoId, "RENDERING", 85);
+          await job.updateProgress(85);
+
+          // 6. Upload final MP4 to R2
+          console.log(`[WORKER] Step 6: Uploading MP4 to R2...`);
+          const finalVideoBuffer = fs.readFileSync(localVideoPath);
+          const videoKey = `rendered/video-${videoId}.mp4`;
+          const finalVideoUrl = await uploadToR2(finalVideoBuffer, videoKey, "video/mp4");
+          
+          await prisma.video.update({
+            where: { id: videoId },
+            data: { videoUrl: finalVideoUrl, status: "COMPLETED" }
           });
 
+          // Clean up local rendered file
+          try {
+            fs.unlinkSync(localVideoPath);
+          } catch (e) {
+            console.warn("⚠️ Failed to clean up local rendered file:", e);
+          }
+
+          await createJobProgress(videoId, "COMPLETED", 100);
           await job.updateProgress(100);
-          return { status: "success", videoId };
+          console.log(`[WORKER] Video ${videoId} successfully generated and uploaded: ${finalVideoUrl}`);
+
+          return { status: "success", videoId, videoUrl: finalVideoUrl };
 
         } catch (pipelineError: any) {
-          console.error(`Error in actual video pipeline job ${job.id}:`, pipelineError);
+          console.error(`❌ Pipeline failed for Video ${videoId}:`, pipelineError);
           await prisma.video.update({
             where: { id: videoId },
             data: { status: "FAILED" }
           });
+          await createJobProgress(videoId, "FAILED", 100, pipelineError?.message || "Unknown pipeline error");
           throw pipelineError;
         }
       },
       {
         connection: connectionOptions,
-        concurrency: 2, // process 2 videos concurrently per worker node
+        concurrency: 2,
       }
     );
 
     worker.on("completed", (job) => {
-      console.log(`[WORKER] Job ${job.id} has completed!`);
+      console.log(`[WORKER] Job ${job.id} completed successfully.`);
     });
 
     worker.on("failed", (job, err) => {
-      console.error(`[WORKER] Job ${job?.id} failed with error:`, err);
+      console.error(`[WORKER] Job ${job?.id} failed:`, err);
     });
 
     worker.on("error", (err) => {
-      console.warn("⚠️ BullMQ Worker encountered a Redis connection error:", err.message);
+      console.warn("⚠️ BullMQ Worker encountered a connection error:", err.message);
     });
 
   } catch (error) {
-    console.warn("⚠️ Worker could not connect to Redis server. Running without active background worker daemon.");
+    console.warn("⚠️ Worker could not initialize. Redis server might be offline.");
   }
 }
 
