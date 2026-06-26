@@ -4,24 +4,9 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { useLanguage } from "@/context/LanguageContext";
 import {
-  Search, Filter, Flame, Play, Download, ExternalLink, Plus,
-  ChevronLeft, ChevronRight, SlidersHorizontal, Library, Trash2, Eye, Heart
+  Search, Flame, Play, Download, Plus,
+  ChevronLeft, ChevronRight, Library, Trash2, Eye, Heart, Loader2
 } from "lucide-react";
-
-const MOCK_VIDEOS = [
-  { id: "vid-1", title: "Le secret terrifiant du Sahara", niche: "Science Insolite", style: "Cinématique SDXL", duration: 30, status: "COMPLETED", viralScore: 84, views: "1.2M", likes: "84K", createdAt: "Il y a 2h", color: "from-orange-950 to-slate-950" },
-  { id: "vid-2", title: "L'Arche Perdue de Salomon", niche: "Histoires Bibliques", style: "Illustration", duration: 45, status: "RENDERING", viralScore: 78, views: "—", likes: "—", createdAt: "Il y a 5min", color: "from-blue-950 to-slate-950", progress: 75 },
-  { id: "vid-3", title: "L'Ombre d'Anubis — Épisode 1", niche: "Mythologie", style: "Dark Fantasy", duration: 30, status: "COMPLETED", viralScore: 92, views: "340K", likes: "21K", createdAt: "Il y a 1 jour", color: "from-amber-950 to-slate-950" },
-  { id: "vid-4", title: "L'Investissement Passif en 2026", niche: "Finance & Richesse", style: "Realistic", duration: 15, status: "FAILED", viralScore: 45, views: "—", likes: "—", createdAt: "Il y a 2 jours", color: "from-green-950 to-slate-950" },
-  { id: "vid-5", title: "5 Lois Secrètes de l'Argent", niche: "Finance & Richesse", style: "Cinématique SDXL", duration: 30, status: "COMPLETED", viralScore: 88, views: "3.4M", likes: "210K", createdAt: "Il y a 3 jours", color: "from-emerald-950 to-slate-950" },
-  { id: "vid-6", title: "Les Créatures du Marais Haïtien", niche: "Culture Haïtienne", style: "Dark Fantasy", duration: 45, status: "COMPLETED", viralScore: 79, views: "156K", likes: "12K", createdAt: "Il y a 4 jours", color: "from-violet-950 to-slate-950" },
-  { id: "vid-7", title: "L'Empire de Gengis Khan", niche: "Histoire", style: "Cinématique SDXL", duration: 60, status: "COMPLETED", viralScore: 86, views: "890K", likes: "62K", createdAt: "Il y a 5 jours", color: "from-red-950 to-slate-950" },
-  { id: "vid-8", title: "Esprit Inarrêtable — Goggins", niche: "Motivation Extrême", style: "Realistic", duration: 15, status: "COMPLETED", viralScore: 91, views: "4.1M", likes: "290K", createdAt: "Il y a 6 jours", color: "from-yellow-950 to-slate-950" },
-  { id: "vid-9", title: "La Chute de Babylone", niche: "Histoire", style: "Dark Fantasy", duration: 45, status: "COMPLETED", viralScore: 77, views: "420K", likes: "28K", createdAt: "Il y a 7 jours", color: "from-stone-950 to-slate-950" },
-  { id: "vid-10", title: "Quantum: Le Temps n'existe pas", niche: "Science Insolite", style: "Cinématique SDXL", duration: 30, status: "RENDERING", viralScore: 82, views: "—", likes: "—", createdAt: "Il y a 8 jours", color: "from-cyan-950 to-slate-950", progress: 40 },
-  { id: "vid-11", title: "Thor vs Zeus — Le Choc des Dieux", niche: "Mythologie", style: "Anime Japonais", duration: 30, status: "COMPLETED", viralScore: 95, views: "2.7M", likes: "185K", createdAt: "Il y a 9 jours", color: "from-indigo-950 to-slate-950" },
-  { id: "vid-12", title: "La Psychologie du Succès", niche: "Développement Personnel", style: "Realistic", duration: 60, status: "FAILED", viralScore: 55, views: "—", likes: "—", createdAt: "Il y a 10 jours", color: "from-pink-950 to-slate-950" },
-];
 
 const NICHES = ["Toutes", "Science Insolite", "Histoires Bibliques", "Mythologie", "Finance & Richesse", "Motivation Extrême", "Histoire", "Culture Haïtienne", "Développement Personnel"];
 const STATUSES = ["Tous", "COMPLETED", "RENDERING", "FAILED"];
@@ -56,14 +41,58 @@ const getStyleName = (s: string, lang: string) => {
   }
 };
 
-const getTimeAgo = (t: string, lang: string) => {
-  if (lang === "fr") return t;
-  return t
-    .replace("Il y a ", "")
-    .replace(" jour", " day")
-    .replace(" min", "min")
-    .replace("h", "h")
-    .trim() + " ago";
+const formatCreatedAt = (dateStr: any, lang: string) => {
+  if (!dateStr) return "";
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) {
+    // If it's already a relative string (from mocks)
+    if (lang === "fr") return dateStr;
+    return dateStr
+      .replace("Il y a ", "")
+      .replace(" jour", " day")
+      .replace(" min", "min")
+      .replace("h", "h")
+      .trim() + " ago";
+  }
+  
+  const diffMs = Date.now() - date.getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  const diffHr = Math.floor(diffMs / 3600000);
+  const diffDay = Math.floor(diffMs / 86400000);
+
+  if (diffMin < 60) {
+    return lang === "fr" ? `Il y a ${Math.max(1, diffMin)} min` : `${Math.max(1, diffMin)}m ago`;
+  }
+  if (diffHr < 24) {
+    return lang === "fr" ? `Il y a ${diffHr}h` : `${diffHr}h ago`;
+  }
+  return lang === "fr" ? `Il y a ${diffDay} jour${diffDay > 1 ? 's' : ''}` : `${diffDay} day${diffDay > 1 ? 's' : ''} ago`;
+};
+
+const getThumbnailColor = (niche: string) => {
+  const n = niche.toLowerCase();
+  if (n.includes("science")) return "from-cyan-950 to-slate-950";
+  if (n.includes("bibli")) return "from-blue-950 to-slate-950";
+  if (n.includes("myth")) return "from-amber-950 to-slate-950";
+  if (n.includes("finance") || n.includes("rich")) return "from-emerald-950 to-slate-950";
+  if (n.includes("cult")) return "from-violet-950 to-slate-950";
+  if (n.includes("hist")) return "from-red-950 to-slate-950";
+  if (n.includes("motiv")) return "from-yellow-950 to-slate-950";
+  return "from-slate-900 to-slate-950";
+};
+
+const getViewsDisplay = (v: any) => {
+  if (v.views !== undefined && v.views !== null) {
+    return typeof v.views === "number" ? (v.views >= 1000000 ? `${(v.views / 1000000).toFixed(1)}M` : v.views >= 1000 ? `${(v.views / 1000).toFixed(0)}K` : v.views.toString()) : v.views;
+  }
+  return "0";
+};
+
+const getLikesDisplay = (v: any) => {
+  if (v.likes !== undefined && v.likes !== null) {
+    return typeof v.likes === "number" ? (v.likes >= 1000000 ? `${(v.likes / 1000000).toFixed(1)}M` : v.likes >= 1000 ? `${(v.likes / 1000).toFixed(0)}K` : v.likes.toString()) : v.likes;
+  }
+  return "0";
 };
 
 export default function VideoLibrary() {
@@ -75,19 +104,69 @@ export default function VideoLibrary() {
   const [page, setPage] = useState(1);
   const PER_PAGE = 9;
 
-  const filtered = MOCK_VIDEOS.filter((v) => {
+  const [videos, setVideos] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [total, setTotal] = useState(0);
+  const [totalPages, setTotalPages] = useState(1);
+
+  // Fetch videos from API
+  const fetchVideos = async (showLoading = false) => {
+    if (showLoading) setLoading(true);
+    try {
+      const queryStatus = status !== "Tous" ? status : "";
+      const queryNiche = niche !== "Toutes" ? niche : "";
+      const res = await fetch(`/api/videos?status=${queryStatus}&niche=${queryNiche}&page=${page}&limit=${PER_PAGE}`);
+      if (res.ok) {
+        const data = await res.json();
+        setVideos(data.videos || []);
+        setTotal(data.total || 0);
+        setTotalPages(data.totalPages || 1);
+      }
+    } catch (err) {
+      console.error("Error fetching library videos:", err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchVideos(true);
+    
+    // Poll for rendering status updates
+    const interval = setInterval(() => {
+      fetchVideos(false);
+    }, 4000);
+
+    return () => clearInterval(interval);
+  }, [status, niche, page]);
+
+  // Apply local sorting and client search filter on top
+  const filtered = videos.filter((v) => {
     const matchSearch = v.title.toLowerCase().includes(search.toLowerCase()) || v.niche.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = status === "Tous" || v.status === status;
-    const matchNiche = niche === "Toutes" || v.niche === niche;
-    return matchSearch && matchStatus && matchNiche;
+    return matchSearch;
   }).sort((a, b) => {
-    if (sort === "Score viral ↓") return b.viralScore - a.viralScore;
-    if (sort === "Vues ↓") return (b.views === "—" ? -1 : 1) - (a.views === "—" ? -1 : 1);
-    return 0; // Plus récentes = default order
+    if (sort === "Score viral ↓") return (b.viralScore || 0) - (a.viralScore || 0);
+    if (sort === "Vues ↓") {
+      const vA = typeof a.views === "string" ? parseFloat(a.views.replace(/[^\d.]/g, '')) * (a.views.includes('M') ? 1000000 : a.views.includes('K') ? 1000 : 1) : (a.views || 0);
+      const vB = typeof b.views === "string" ? parseFloat(b.views.replace(/[^\d.]/g, '')) * (b.views.includes('M') ? 1000000 : b.views.includes('K') ? 1000 : 1) : (b.views || 0);
+      return vB - vA;
+    }
+    return 0; // default sorted by API (Plus récentes)
   });
 
-  const totalPages = Math.ceil(filtered.length / PER_PAGE);
-  const paginated = filtered.slice((page - 1) * PER_PAGE, page * PER_PAGE);
+  const handleDelete = async (id: string) => {
+    if (!confirm(language === "fr" ? "Êtes-vous sûr de vouloir supprimer cette vidéo ?" : "Are you sure you want to delete this video?")) {
+      return;
+    }
+    try {
+      const res = await fetch(`/api/videos/${id}/status`, { method: "DELETE" });
+      if (res.ok) {
+        fetchVideos(false);
+      }
+    } catch (err) {
+      console.error("Error deleting video:", err);
+    }
+  };
 
   const statusBadge = (s: string) => {
     if (s === "COMPLETED") return <span className="text-[8px] px-2 py-0.5 bg-green-500/15 border border-green-500/30 text-green-400 font-bold rounded-full uppercase">{t("dash.recent.completed")}</span>;
@@ -96,7 +175,7 @@ export default function VideoLibrary() {
   };
 
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-6 font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -104,11 +183,11 @@ export default function VideoLibrary() {
             <Library className="w-6 h-6 text-primary" />
             {t("lib.title")}
           </h1>
-          <p className="text-xs text-gray-400 mt-0.5">{MOCK_VIDEOS.length} {t("lib.subtitle")}</p>
+          <p className="text-xs text-gray-400 mt-0.5">{total} {t("lib.subtitle")}</p>
         </div>
         <Link
           href="/dashboard/videos"
-          className="flex items-center gap-2 px-4 py-2.5 bg-neon-glow hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all w-fit"
+          className="flex items-center gap-2 px-4 py-2.5 bg-neon-glow hover:opacity-90 text-white font-bold text-xs rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-all w-fit font-display"
         >
           <Plus className="w-4 h-4" />
           {t("lib.btn.new")}
@@ -138,75 +217,102 @@ export default function VideoLibrary() {
         </select>
       </div>
 
-      {/* Grid */}
-      {paginated.length === 0 ? (
+      {/* Loading state */}
+      {loading && filtered.length === 0 ? (
+        <div className="flex justify-center items-center py-24">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center gap-3">
           <Library className="w-10 h-10 text-gray-600" />
           <p className="text-gray-500 text-sm font-medium">{t("lib.empty")}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {paginated.map((v) => (
-            <div key={v.id} className="glass-panel rounded-2xl border border-border overflow-hidden group hover:border-primary/30 transition-all flex flex-col">
-              {/* Thumbnail */}
-              <div className={`relative h-40 bg-gradient-to-br ${v.color} flex items-center justify-center overflow-hidden`}>
-                <div className="absolute inset-0 bg-black/30" />
-                <div className="opacity-0 group-hover:opacity-100 transition-opacity z-10">
-                  <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center">
-                    <Play className="w-5 h-5 text-white fill-current ml-0.5" />
+          {filtered.map((v) => {
+            const thumbnailGrad = getThumbnailColor(v.niche);
+            const progress = v.jobs?.[0]?.progress ?? v.progress ?? 0;
+            return (
+              <div key={v.id} className="glass-panel rounded-2xl border border-border overflow-hidden group hover:border-primary/30 transition-all flex flex-col">
+                {/* Thumbnail */}
+                <div className={`relative h-40 bg-gradient-to-br ${thumbnailGrad} flex items-center justify-center overflow-hidden`}>
+                  <div className="absolute inset-0 bg-black/30" />
+                  <div className="opacity-0 group-hover:opacity-100 transition-opacity z-10">
+                    <Link href={`/dashboard/videos/${v.id}`}>
+                      <div className="w-12 h-12 rounded-full bg-white/20 backdrop-blur-sm border border-white/30 flex items-center justify-center cursor-pointer hover:scale-105 transition-all">
+                        <Play className="w-5 h-5 text-white fill-current ml-0.5" />
+                      </div>
+                    </Link>
+                  </div>
+                  <div className="absolute top-3 left-3">{statusBadge(v.status)}</div>
+                  <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
+                    <Flame className="w-3 h-3 text-orange-400" />
+                    <span className="text-[9px] font-black text-white">{v.viralScore ?? "—"}</span>
+                  </div>
+                  <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5">
+                    <span className="text-[9px] font-bold text-white">{v.duration}s</span>
+                  </div>
+                  {v.status === "RENDERING" && (
+                    <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10">
+                      <div className="h-full bg-yellow-400 transition-all" style={{ width: `${progress}%` }} />
+                    </div>
+                  )}
+                </div>
+
+                {/* Content */}
+                <div className="p-4 flex flex-col gap-3 flex-1 text-left">
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] font-bold text-secondary uppercase tracking-wider">{getNicheName(v.niche, language)}</span>
+                    <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 font-display">{v.title}</h3>
+                    <div className="flex items-center gap-3 text-[9px] text-gray-500 mt-0.5">
+                      <span>{getStyleName(v.style, language)}</span>
+                      <span>•</span>
+                      <span>{formatCreatedAt(v.createdAt, language)}</span>
+                    </div>
+                  </div>
+
+                  {v.status === "COMPLETED" && (
+                    <div className="flex items-center gap-4 text-[10px] text-gray-400">
+                      <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-primary" /> <b className="text-white">{getViewsDisplay(v)}</b></span>
+                      <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-accent-pink" /> <b className="text-white">{getLikesDisplay(v)}</b></span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-2 mt-auto pt-2 border-t border-border/60">
+                    <Link
+                      href={`/dashboard/videos/${v.id}`}
+                      className="flex-1 py-2 text-center text-[10px] font-bold text-white bg-primary/10 hover:bg-primary/20 border border-primary/20 hover:border-primary/40 rounded-lg transition-all font-display"
+                    >
+                      {t("lib.card.detail")}
+                    </Link>
+                    {v.videoUrl ? (
+                      <a
+                        href={v.videoUrl}
+                        download
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all flex items-center justify-center"
+                        title={t("lib.card.download")}
+                      >
+                        <Download className="w-3.5 h-3.5" />
+                      </a>
+                    ) : (
+                      <button disabled className="p-2 bg-white/5 border border-white/10 rounded-lg text-gray-600 cursor-not-allowed flex items-center justify-center">
+                        <Download className="w-3.5 h-3.5" />
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleDelete(v.id)}
+                      className="p-2 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-all flex items-center justify-center"
+                      title={t("lib.card.delete")}
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                   </div>
                 </div>
-                <div className="absolute top-3 left-3">{statusBadge(v.status)}</div>
-                <div className="absolute top-3 right-3 flex items-center gap-1 bg-black/50 backdrop-blur-sm rounded-full px-2 py-0.5">
-                  <Flame className="w-3 h-3 text-orange-400" />
-                  <span className="text-[9px] font-black text-white">{v.viralScore}</span>
-                </div>
-                <div className="absolute bottom-3 right-3 bg-black/60 backdrop-blur-sm rounded px-1.5 py-0.5">
-                  <span className="text-[9px] font-bold text-white">{v.duration}s</span>
-                </div>
-                {v.status === "RENDERING" && (
-                  <div className="absolute bottom-0 left-0 right-0 h-1 bg-white/10">
-                    <div className="h-full bg-yellow-400 transition-all" style={{ width: `${(v as any).progress}%` }} />
-                  </div>
-                )}
               </div>
-
-              {/* Content */}
-              <div className="p-4 flex flex-col gap-3 flex-1">
-                <div className="flex flex-col gap-1">
-                  <span className="text-[9px] font-bold text-secondary uppercase tracking-wider">{getNicheName(v.niche, language)}</span>
-                  <h3 className="text-sm font-bold text-white leading-snug line-clamp-2 font-display">{v.title}</h3>
-                  <div className="flex items-center gap-3 text-[9px] text-gray-500 mt-0.5">
-                    <span>{getStyleName(v.style, language)}</span>
-                    <span>•</span>
-                    <span>{getTimeAgo(v.createdAt, language)}</span>
-                  </div>
-                </div>
-
-                {v.status === "COMPLETED" && (
-                  <div className="flex items-center gap-4 text-[10px] text-gray-400">
-                    <span className="flex items-center gap-1"><Eye className="w-3.5 h-3.5 text-primary" /> <b className="text-white">{v.views}</b></span>
-                    <span className="flex items-center gap-1"><Heart className="w-3.5 h-3.5 text-accent-pink" /> <b className="text-white">{v.likes}</b></span>
-                  </div>
-                )}
-
-                <div className="flex items-center gap-2 mt-auto pt-2 border-t border-border/60">
-                  <Link
-                    href={`/dashboard/videos/${v.id}`}
-                    className="flex-1 py-2 text-center text-[10px] font-bold text-white bg-primary/10 hover:bg-primary/20 border border-primary/20 hover:border-primary/40 rounded-lg transition-all"
-                  >
-                    {t("lib.card.detail")}
-                  </Link>
-                  <button className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all" title={t("lib.card.download")}>
-                    <Download className="w-3.5 h-3.5" />
-                  </button>
-                  <button className="p-2 bg-white/5 hover:bg-red-500/10 border border-white/10 hover:border-red-500/20 rounded-lg text-gray-400 hover:text-red-400 transition-all" title={t("lib.card.delete")}>
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
@@ -216,7 +322,7 @@ export default function VideoLibrary() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-border text-gray-400 hover:text-white hover:border-white/20 rounded-xl disabled:opacity-30 disabled:pointer-events-none transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-border text-gray-400 hover:text-white hover:border-white/20 rounded-xl disabled:opacity-30 disabled:pointer-events-none transition-all font-display"
           >
             <ChevronLeft className="w-4 h-4" /> {language === "fr" ? "Précédent" : "Previous"}
           </button>
@@ -226,7 +332,7 @@ export default function VideoLibrary() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-border text-gray-400 hover:text-white hover:border-white/20 rounded-xl disabled:opacity-30 disabled:pointer-events-none transition-all"
+            className="flex items-center gap-1.5 px-3 py-2 text-xs font-semibold border border-border text-gray-400 hover:text-white hover:border-white/20 rounded-xl disabled:opacity-30 disabled:pointer-events-none transition-all font-display"
           >
             {language === "fr" ? "Suivant" : "Next"} <ChevronRight className="w-4 h-4" />
           </button>

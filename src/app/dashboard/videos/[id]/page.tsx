@@ -96,6 +96,37 @@ const DEFAULT_MOCK_VIDEO: VideoDetails = {
   ]
 };
 
+const parseScriptString = (scriptStr: string) => {
+  if (!scriptStr) return { hook: "", narration: "", cta: "" };
+  
+  const hookMatch = scriptStr.match(/HOOK:\s*(.*?)(?=NARRATION:|CTA:|$)/i);
+  const narrationMatch = scriptStr.match(/NARRATION:\s*(.*?)(?=HOOK:|CTA:|$)/i);
+  const ctaMatch = scriptStr.match(/CTA:\s*(.*?)(?=HOOK:|NARRATION:|$)/i);
+
+  if (hookMatch || narrationMatch || ctaMatch) {
+    return {
+      hook: hookMatch?.[1]?.trim() || "",
+      narration: narrationMatch?.[1]?.trim() || scriptStr,
+      cta: ctaMatch?.[1]?.trim() || ""
+    };
+  }
+
+  const sentences = scriptStr.split(/[.!?]+/).map(s => s.trim()).filter(Boolean);
+  if (sentences.length >= 3) {
+    return {
+      hook: sentences[0] + ".",
+      narration: sentences.slice(1, sentences.length - 1).join(". ") + ".",
+      cta: sentences[sentences.length - 1] + "."
+    };
+  }
+  
+  return {
+    hook: "",
+    narration: scriptStr,
+    cta: ""
+  };
+};
+
 export default function VideoDetailPage() {
   const { language: currentLang, t } = useLanguage();
   const params = useParams();
@@ -114,58 +145,73 @@ export default function VideoDetailPage() {
   });
 
   useEffect(() => {
-    // Attempt to fetch from API videos list first, fallback to mock details
-    const loadVideoDetails = async () => {
+    let active = true;
+    const loadVideoDetails = async (showLoading = false) => {
+      if (showLoading) setLoading(true);
       try {
-        setLoading(true);
-        const res = await fetch("/api/videos");
-        if (res.ok) {
+        const res = await fetch(`/api/videos/${id}/status`);
+        if (res.ok && active) {
           const data = await res.json();
-          const found = data.videos?.find((v: any) => v.id === id);
-          if (found) {
+          if (data && !data.error) {
             setVideo({
-              ...DEFAULT_MOCK_VIDEO,
-              id: found.id,
-              title: found.title,
-              niche: found.niche,
-              style: found.style,
-              duration: found.duration,
-              status: found.status,
-              viralScore: found.viralScore || 78,
-              views: found.views || 0,
-              likes: found.likes || 0,
-              createdAt: found.createdAt,
+              id: data.videoId,
+              title: data.title,
+              niche: data.niche || "Niche",
+              style: data.style || "Style",
+              duration: data.duration || 30,
+              status: data.status,
+              videoUrl: data.videoUrl,
+              viralScore: data.viralScore || 75,
+              views: data.views || 0,
+              likes: data.likes || 0,
+              shares: data.shares || 0,
+              createdAt: data.updatedAt || new Date().toISOString(),
+              script: parseScriptString(data.script || data.title),
+              subtitles: data.subtitles || [],
+              voice: data.voice || "Antonio",
+              language: data.language || "French"
             });
             return;
           }
         }
       } catch (e) {
-        // Fallback
+        console.error("Error loading video details:", e);
       } finally {
-        setLoading(false);
+        if (active) setLoading(false);
       }
 
-      // If not found in list or API failed, construct mock details based on ID
-      const matchingMock = {
-        ...DEFAULT_MOCK_VIDEO,
-        id: id || "vid-1",
-        title: id === "vid-2" ? "L'Arche Perdue de Salomon" :
-               id === "vid-3" ? "L'Ombre d'Anubis - Épisode 1" :
-               id === "vid-4" ? "L'Investissement Passif en 2026" : DEFAULT_MOCK_VIDEO.title,
-        niche: id === "vid-2" ? "Histoires Bibliques" :
-               id === "vid-3" ? "Mythologie" :
-               id === "vid-4" ? "Finance & Richesse" : DEFAULT_MOCK_VIDEO.niche,
-        status: id === "vid-2" ? "RENDERING" :
-                id === "vid-4" ? "FAILED" : "COMPLETED",
-        viralScore: id === "vid-2" ? 78 : id === "vid-3" ? 92 : id === "vid-4" ? 45 : 84,
-        views: id === "vid-3" ? 340000 : 0,
-        likes: id === "vid-3" ? 21000 : 0,
-      };
-      setVideo(matchingMock);
-      setLoading(false);
+      // Fallback
+      if (active) {
+        const matchingMock = {
+          ...DEFAULT_MOCK_VIDEO,
+          id: id || "vid-1",
+          title: id === "vid-2" ? "L'Arche Perdue de Salomon" :
+                 id === "vid-3" ? "L'Ombre d'Anubis - Épisode 1" :
+                 id === "vid-4" ? "L'Investissement Passif en 2026" : DEFAULT_MOCK_VIDEO.title,
+          niche: id === "vid-2" ? "Histoires Bibliques" :
+                 id === "vid-3" ? "Mythologie" :
+                 id === "vid-4" ? "Finance & Richesse" : DEFAULT_MOCK_VIDEO.niche,
+          status: id === "vid-2" ? "RENDERING" :
+                  id === "vid-4" ? "FAILED" : "COMPLETED",
+          viralScore: id === "vid-2" ? 78 : id === "vid-3" ? 92 : id === "vid-4" ? 45 : 84,
+          views: id === "vid-3" ? 340000 : 0,
+          likes: id === "vid-3" ? 21000 : 0,
+        };
+        setVideo(matchingMock);
+        setLoading(false);
+      }
     };
 
-    loadVideoDetails();
+    loadVideoDetails(true);
+
+    const interval = setInterval(() => {
+      loadVideoDetails(false);
+    }, 4000);
+
+    return () => {
+      active = false;
+      clearInterval(interval);
+    };
   }, [id]);
 
   const handlePublish = async (platform: string) => {
