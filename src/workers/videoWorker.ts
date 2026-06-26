@@ -364,6 +364,104 @@ export async function runMockPipeline(videoId: string) {
   }
 }
 
+export async function runProductionPipeline(
+  videoId: string,
+  data: {
+    topic: string;
+    niche: string;
+    style: string;
+    tone: string;
+    duration: number;
+    language: string;
+    voice: string;
+  },
+  onProgress?: (progress: number) => Promise<void> | void
+) {
+  const { topic, niche, style, tone, duration, language, voice } = data;
+  try {
+    // 1. Generate Script
+    console.log(`[WORKER] Step 1: Generating script via Claude...`);
+    const script = await callClaudeAPI(topic, niche, tone, duration, language);
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { script, status: "SCRIPT_DONE", viralScore: Math.floor(Math.random() * 20) + 75 }
+    });
+    await createJobProgress(videoId, "SCRIPT_DONE", 15);
+    if (onProgress) await onProgress(15);
+
+    // 2. Generate Voice
+    console.log(`[WORKER] Step 2: Synthesizing voice via ElevenLabs...`);
+    const voiceBuffer = await callElevenLabsTTS(script, voice);
+    const voiceKey = `voices/voice-${videoId}.mp3`;
+    const voiceUrl = await uploadToR2(voiceBuffer, voiceKey, "audio/mpeg");
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { voiceUrl, status: "VOICE_DONE" }
+    });
+    await createJobProgress(videoId, "VOICE_DONE", 30);
+    if (onProgress) await onProgress(30);
+
+    // 3. Generate Images
+    console.log(`[WORKER] Step 3: Generating images via SDXL...`);
+    const imageUrls = await callSDXLAPI(script, style);
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: "IMAGES_DONE" }
+    });
+    await createJobProgress(videoId, "IMAGES_DONE", 45);
+    if (onProgress) await onProgress(45);
+
+    // 4. Generate Subtitles
+    console.log(`[WORKER] Step 4: Transcribing voice via Whisper...`);
+    const subtitles = await callWhisperTranscription(voiceBuffer);
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { subtitles: subtitles as any, status: "CAPTIONS_DONE" }
+    });
+    await createJobProgress(videoId, "CAPTIONS_DONE", 60);
+    if (onProgress) await onProgress(60);
+
+    // 5. Render Video Composition
+    console.log(`[WORKER] Step 5: Rendering video using Remotion CLI...`);
+    const localVideoPath = await renderRemotionVideo(imageUrls, voiceUrl, subtitles, videoId);
+    await createJobProgress(videoId, "RENDERING", 85);
+    if (onProgress) await onProgress(85);
+
+    // 6. Upload final MP4 to R2
+    console.log(`[WORKER] Step 6: Uploading MP4 to R2...`);
+    const finalVideoBuffer = fs.readFileSync(localVideoPath);
+    const videoKey = `rendered/video-${videoId}.mp4`;
+    const finalVideoUrl = await uploadToR2(finalVideoBuffer, videoKey, "video/mp4");
+    
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { videoUrl: finalVideoUrl, status: "COMPLETED" }
+    });
+
+    // Clean up local rendered file
+    try {
+      fs.unlinkSync(localVideoPath);
+    } catch (e) {
+      console.warn("⚠️ Failed to clean up local rendered file:", e);
+    }
+
+    await createJobProgress(videoId, "COMPLETED", 100);
+    if (onProgress) await onProgress(100);
+    console.log(`[WORKER] Video ${videoId} successfully generated and uploaded: ${finalVideoUrl}`);
+
+    return { status: "success", videoId, videoUrl: finalVideoUrl };
+
+  } catch (pipelineError: any) {
+    console.error(`❌ Pipeline failed for Video ${videoId}:`, pipelineError);
+    await prisma.video.update({
+      where: { id: videoId },
+      data: { status: "FAILED" }
+    });
+    await createJobProgress(videoId, "FAILED", 100, pipelineError?.message || "Unknown pipeline error");
+    throw pipelineError;
+  }
+}
+
 let worker: Worker | null = null;
 
 if (process.env.NODE_ENV !== "test") {
@@ -379,88 +477,11 @@ if (process.env.NODE_ENV !== "test") {
           return { status: "success", mock: true };
         }
 
-        try {
-          // 1. Generate Script
-          console.log(`[WORKER] Step 1: Generating script via Claude...`);
-          const script = await callClaudeAPI(topic, niche, tone, duration, language);
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { script, status: "SCRIPT_DONE", viralScore: Math.floor(Math.random() * 20) + 75 }
-          });
-          await createJobProgress(videoId, "SCRIPT_DONE", 15);
-          await job.updateProgress(15);
-
-          // 2. Generate Voice
-          console.log(`[WORKER] Step 2: Synthesizing voice via ElevenLabs...`);
-          const voiceBuffer = await callElevenLabsTTS(script, voice);
-          const voiceKey = `voices/voice-${videoId}.mp3`;
-          const voiceUrl = await uploadToR2(voiceBuffer, voiceKey, "audio/mpeg");
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { voiceUrl, status: "VOICE_DONE" }
-          });
-          await createJobProgress(videoId, "VOICE_DONE", 30);
-          await job.updateProgress(30);
-
-          // 3. Generate Images
-          console.log(`[WORKER] Step 3: Generating images via SDXL...`);
-          const imageUrls = await callSDXLAPI(script, style);
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { status: "IMAGES_DONE" }
-          });
-          await createJobProgress(videoId, "IMAGES_DONE", 45);
-          await job.updateProgress(45);
-
-          // 4. Generate Subtitles
-          console.log(`[WORKER] Step 4: Transcribing voice via Whisper...`);
-          const subtitles = await callWhisperTranscription(voiceBuffer);
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { subtitles: subtitles as any, status: "CAPTIONS_DONE" }
-          });
-          await createJobProgress(videoId, "CAPTIONS_DONE", 60);
-          await job.updateProgress(60);
-
-          // 5. Render Video Composition
-          console.log(`[WORKER] Step 5: Rendering video using Remotion CLI...`);
-          const localVideoPath = await renderRemotionVideo(imageUrls, voiceUrl, subtitles, videoId);
-          await createJobProgress(videoId, "RENDERING", 85);
-          await job.updateProgress(85);
-
-          // 6. Upload final MP4 to R2
-          console.log(`[WORKER] Step 6: Uploading MP4 to R2...`);
-          const finalVideoBuffer = fs.readFileSync(localVideoPath);
-          const videoKey = `rendered/video-${videoId}.mp4`;
-          const finalVideoUrl = await uploadToR2(finalVideoBuffer, videoKey, "video/mp4");
-          
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { videoUrl: finalVideoUrl, status: "COMPLETED" }
-          });
-
-          // Clean up local rendered file
-          try {
-            fs.unlinkSync(localVideoPath);
-          } catch (e) {
-            console.warn("⚠️ Failed to clean up local rendered file:", e);
-          }
-
-          await createJobProgress(videoId, "COMPLETED", 100);
-          await job.updateProgress(100);
-          console.log(`[WORKER] Video ${videoId} successfully generated and uploaded: ${finalVideoUrl}`);
-
-          return { status: "success", videoId, videoUrl: finalVideoUrl };
-
-        } catch (pipelineError: any) {
-          console.error(`❌ Pipeline failed for Video ${videoId}:`, pipelineError);
-          await prisma.video.update({
-            where: { id: videoId },
-            data: { status: "FAILED" }
-          });
-          await createJobProgress(videoId, "FAILED", 100, pipelineError?.message || "Unknown pipeline error");
-          throw pipelineError;
-        }
+        return runProductionPipeline(
+          videoId,
+          { topic, niche, style, tone, duration, language, voice },
+          (progress) => job.updateProgress(progress)
+        );
       },
       {
         connection: connectionOptions,

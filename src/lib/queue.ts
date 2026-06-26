@@ -67,18 +67,33 @@ export async function queueVideoJob(videoId: string, options: {
     });
     return { id: job.id, name: job.name, queued: true };
   } else {
-    // Mock queue execution for local test or fallback
-    console.log(`[MOCK QUEUE] Video job queued for Video ID: ${videoId}`, options);
+    // Fallback queue execution for local test or environments without Redis (like simple Node.js servers, Hostinger)
+    console.log(`[QUEUE FALLBACK] Redis offline. Running in-process background task for Video ID: ${videoId}`, options);
     
-    // Auto-trigger simulated worker in background (avoid blocking API response)
     if (process.env.USE_MOCK_AI === "true") {
+      // Auto-trigger simulated worker in background (avoid blocking API response)
       import("../workers/videoWorker").then(({ runMockPipeline }) => {
         runMockPipeline(videoId).catch(err => 
           console.error(`Error in mock background pipeline for ${videoId}:`, err)
         );
       });
+    } else {
+      // Trigger actual production worker in background
+      import("../workers/videoWorker").then(({ runProductionPipeline }) => {
+        runProductionPipeline(videoId, {
+          topic: options.topic || "Default Topic",
+          niche: options.niche,
+          style: options.style,
+          tone: options.tone,
+          duration: options.duration,
+          language: options.language,
+          voice: options.voice,
+        }).catch(err =>
+          console.error(`Error in live production background pipeline for ${videoId}:`, err)
+        );
+      });
     }
 
-    return { id: `mock-job-${videoId}`, name: `mock-render-${videoId}`, queued: false };
+    return { id: `fallback-job-${videoId}`, name: `fallback-render-${videoId}`, queued: false };
   }
 }
