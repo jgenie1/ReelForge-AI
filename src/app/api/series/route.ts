@@ -1,4 +1,5 @@
 import { NextResponse } from 'next/server';
+import { auth } from '@clerk/nextjs/server';
 import { prisma } from '@/lib/db';
 
 const MOCK_SERIES = [
@@ -10,8 +11,22 @@ const MOCK_SERIES = [
 
 export async function GET(req: Request) {
   try {
+    let clerkId = 'mock-clerk-user';
     try {
-      const series = await prisma.series.findMany({ orderBy: { createdAt: 'desc' }, include: { videos: { select: { id: true, status: true } } } });
+      const session = auth();
+      if (session?.userId) {
+        clerkId = session.userId;
+      }
+    } catch {
+      // clerk keys missing or offline
+    }
+
+    try {
+      const series = await prisma.series.findMany({ 
+        where: { user: { clerkId } },
+        orderBy: { createdAt: 'desc' }, 
+        include: { videos: { select: { id: true, status: true } } } 
+      });
       return NextResponse.json({ series });
     } catch {
       return NextResponse.json({ series: MOCK_SERIES, mock: true });
@@ -30,6 +45,16 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: 'name, niche, videoCount sont requis' }, { status: 400 });
     }
 
+    let clerkId = 'mock-clerk-user';
+    try {
+      const session = auth();
+      if (session?.userId) {
+        clerkId = session.userId;
+      }
+    } catch {
+      // clerk keys missing or offline
+    }
+
     try {
       // Try to create in real DB
       const series = await prisma.series.create({
@@ -39,7 +64,7 @@ export async function POST(req: Request) {
           videoCount: Number(videoCount),
           intervalHours: Number(intervalHours) || 24,
           status: 'ACTIVE',
-          user: { connect: { clerkId: 'mock-clerk-user' } }
+          user: { connect: { clerkId } }
         }
       });
       return NextResponse.json({ series, created: true }, { status: 201 });

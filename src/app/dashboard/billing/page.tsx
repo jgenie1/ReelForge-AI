@@ -1,16 +1,13 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useLanguage } from "@/context/LanguageContext";
 import { 
-  CreditCard, 
   Check, 
   Flame, 
-  Sparkles, 
-  ArrowUpRight, 
-  AlertCircle,
-  HelpCircle,
-  Clock
+  Clock,
+  Loader2,
+  X
 } from "lucide-react";
 
 const PLANS = [
@@ -60,14 +57,52 @@ const PLANS = [
   }
 ];
 
-const BILLING_HISTORY = [
-  { id: "inv-1", date: "12 Juin 2026", description: "Abonnement Plan Creator (Mensuel)", amount: "49.00 €", status: "Payé" },
-  { id: "inv-2", date: "15 Mai 2026", description: "Recharge 50 Crédits à la carte", amount: "19.00 €", status: "Payé" },
-  { id: "inv-3", date: "12 Mai 2026", description: "Abonnement Plan Creator (Mensuel)", amount: "49.00 €", status: "Payé" }
+const INITIAL_BILLING_HISTORY = [
+  { id: "inv-9032", date: "12 Juin 2026", description: "Abonnement Plan Creator (Mensuel)", amount: "49.00 €", status: "Payé" },
+  { id: "inv-8721", date: "15 Mai 2026", description: "Recharge 50 Crédits à la carte", amount: "19.00 €", status: "Payé" },
+  { id: "inv-8409", date: "12 Mai 2026", description: "Abonnement Plan Creator (Mensuel)", amount: "49.00 €", status: "Payé" }
 ];
 
 export default function BillingHub() {
   const { language } = useLanguage();
+  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
+  const [selectedPlan, setSelectedPlan] = useState<string>("Creator");
+  const [logs, setLogs] = useState(INITIAL_BILLING_HISTORY);
+  
+  const [credits, setCredits] = useState(124);
+  const [maxCredits, setMaxCredits] = useState(150);
+  
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
+  const [checkoutLoading, setCheckoutLoading] = useState<string | null>(null);
+  const [creditsModalOpen, setCreditsModalOpen] = useState(false);
+
+  // Sync user credits count from stats endpoint
+  useEffect(() => {
+    const fetchCredits = async () => {
+      try {
+        const res = await fetch("/api/dashboard/stats");
+        if (res.ok) {
+          const data = await res.json();
+          if (data && data.credits !== undefined) {
+            setCredits(data.credits);
+            if (data.totalSeries > 0) {
+              setSelectedPlan("Agency");
+              setMaxCredits(400);
+            } else if (data.totalVideos > 20) {
+              setSelectedPlan("Creator");
+              setMaxCredits(150);
+            } else {
+              setSelectedPlan("Starter");
+              setMaxCredits(50);
+            }
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching credits on billing page:", err);
+      }
+    };
+    fetchCredits();
+  }, []);
 
   const getPlanDesc = (name: string) => {
     if (language === "en") {
@@ -113,7 +148,9 @@ export default function BillingHub() {
   const getLogDescription = (desc: string) => {
     if (language === "en") {
       if (desc.includes("Abonnement Plan Creator")) return "Creator Plan Subscription (Monthly)";
-      if (desc.includes("Recharge 50 Crédits")) return "On-demand 50 Credits top-up";
+      if (desc.includes("Abonnement Plan Starter")) return "Starter Plan Subscription (Monthly)";
+      if (desc.includes("Abonnement Plan Agency")) return "Agency Plan Subscription (Monthly)";
+      if (desc.includes("Recharge")) return desc.replace("Recharge", "Top up").replace("Crédits à la carte", "On-demand Credits");
     }
     return desc;
   };
@@ -125,10 +162,6 @@ export default function BillingHub() {
     return date;
   };
 
-  const [billingCycle, setBillingCycle] = useState<"monthly" | "yearly">("monthly");
-  const [selectedPlan, setSelectedPlan] = useState<string>("Creator");
-  const [logs, setLogs] = useState(BILLING_HISTORY);
-
   const calculatePrice = (basePrice: string) => {
     const num = Number(basePrice);
     if (billingCycle === "yearly") {
@@ -137,8 +170,60 @@ export default function BillingHub() {
     return basePrice;
   };
 
+  const handlePlanCheckout = async (planName: string) => {
+    if (planName === selectedPlan) return;
+    setCheckoutLoading(planName);
+    
+    // Simulate redirection/processing Stripe session
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    const addedCredits = planName === "Agency" ? 400 : planName === "Starter" ? 50 : 150;
+    const planPrice = planName === "Agency" ? "99.00 €" : planName === "Starter" ? "19.00 €" : "49.00 €";
+
+    setCredits(addedCredits);
+    setMaxCredits(addedCredits);
+    setSelectedPlan(planName);
+
+    setLogs(prev => [
+      {
+        id: `inv-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { day: "numeric", month: "long", year: "numeric" }),
+        description: `Abonnement Plan ${planName} (${billingCycle === "yearly" ? "Annuel" : "Mensuel"})`,
+        amount: planPrice,
+        status: "Payé"
+      },
+      ...prev
+    ]);
+
+    setSuccessMsg(language === "fr" ? `Abonnement au plan ${planName} activé avec succès (Mode Simulation).` : `Successfully subscribed to ${planName} plan (Simulation Mode).`);
+    setCheckoutLoading(null);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
+  const handleBuyCredits = async (amount: number, price: string) => {
+    setCheckoutLoading("credits");
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    setCredits(prev => prev + amount);
+    setLogs(prev => [
+      {
+        id: `inv-${Math.floor(1000 + Math.random() * 9000)}`,
+        date: new Date().toLocaleDateString(language === "fr" ? "fr-FR" : "en-US", { day: "numeric", month: "long", year: "numeric" }),
+        description: `Recharge ${amount} Crédits à la carte`,
+        amount: price,
+        status: "Payé"
+      },
+      ...prev
+    ]);
+
+    setSuccessMsg(language === "fr" ? `Recharge de ${amount} crédits effectuée avec succès (Simulation).` : `Successfully topped up ${amount} credits (Simulation).`);
+    setCreditsModalOpen(false);
+    setCheckoutLoading(null);
+    setTimeout(() => setSuccessMsg(null), 4000);
+  };
+
   return (
-    <div className="flex flex-col gap-8 text-left">
+    <div className="flex flex-col gap-8 text-left font-sans">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
@@ -156,7 +241,7 @@ export default function BillingHub() {
               billingCycle === "monthly" ? "bg-primary text-white" : "text-gray-400 hover:text-white"
             }`}
           >
-            Mensuel
+            {language === "fr" ? "Mensuel" : "Monthly"}
           </button>
           <button 
             onClick={() => setBillingCycle("yearly")}
@@ -168,6 +253,13 @@ export default function BillingHub() {
           </button>
         </div>
       </div>
+
+      {/* Alert Banner */}
+      {successMsg && (
+        <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-2xl text-xs font-semibold text-green-400">
+          {successMsg}
+        </div>
+      )}
 
       {/* Credit meter details widget */}
       <div className="glass-panel p-6 rounded-3xl border border-border flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6">
@@ -184,8 +276,11 @@ export default function BillingHub() {
         </div>
 
         <div className="flex flex-col items-end gap-2 flex-shrink-0 w-full sm:w-auto">
-          <span className="text-2xl font-black text-white font-display">124 / 150 <span className="text-xs text-gray-500 font-medium">{language === "fr" ? "crédits" : "credits"}</span></span>
-          <button className="px-4 py-2 text-xs font-bold text-background bg-secondary hover:bg-secondary-hover rounded-xl shadow-lg shadow-secondary/10 transition-all w-full sm:w-auto">
+          <span className="text-2xl font-black text-white font-display">{credits} / {maxCredits} <span className="text-xs text-gray-500 font-medium">{language === "fr" ? "crédits" : "credits"}</span></span>
+          <button 
+            onClick={() => setCreditsModalOpen(true)}
+            className="px-4 py-2 text-xs font-bold text-background bg-secondary hover:bg-secondary-hover rounded-xl shadow-lg shadow-secondary/10 active:scale-95 transition-all w-full sm:w-auto font-display"
+          >
             {language === "fr" ? "Acheter des crédits à la carte" : "Buy credits on demand"}
           </button>
         </div>
@@ -236,14 +331,21 @@ export default function BillingHub() {
             </div>
 
             <button 
-              onClick={() => setSelectedPlan(plan.name)}
-              className={`w-full mt-8 py-3.5 font-bold text-xs rounded-xl transition-all ${
-                plan.name === "Creator" 
-                  ? "bg-neon-glow hover:opacity-90 text-white shadow-lg shadow-primary/10" 
+              onClick={() => handlePlanCheckout(plan.name)}
+              disabled={checkoutLoading !== null}
+              className={`w-full mt-8 py-3.5 font-bold text-xs rounded-xl active:scale-95 transition-all flex items-center justify-center gap-2 font-display ${
+                plan.name === selectedPlan 
+                  ? "bg-secondary text-background hover:bg-secondary-hover shadow-lg shadow-secondary/10" 
                   : "bg-white/5 border border-white/10 hover:bg-white/10 text-white"
               }`}
             >
-              {plan.name === "Creator" ? (language === "fr" ? "Plan Actif" : "Active Plan") : (language === "fr" ? `Choisir le plan ${plan.name}` : `Choose the ${plan.name} plan`)}
+              {checkoutLoading === plan.name ? (
+                <Loader2 className="w-4 h-4 animate-spin text-white" />
+              ) : plan.name === selectedPlan ? (
+                language === "fr" ? "Plan Actif" : "Active Plan"
+              ) : (
+                language === "fr" ? `Choisir le plan ${plan.name}` : `Choose the ${plan.name} plan`
+              )}
             </button>
           </div>
         ))}
@@ -285,6 +387,57 @@ export default function BillingHub() {
           </table>
         </div>
       </div>
+
+      {/* Buy Credits Modal Selector */}
+      {creditsModalOpen && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="glass-panel max-w-md w-full border border-border rounded-3xl p-6 sm:p-8 flex flex-col gap-6 relative animate-scale-up">
+            <button 
+              onClick={() => setCreditsModalOpen(false)}
+              className="absolute right-4 top-4 p-1.5 bg-white/5 border border-white/10 rounded-lg text-gray-400 hover:text-white transition-all"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div>
+              <h3 className="text-base font-bold text-white font-display flex items-center gap-1.5">
+                <Flame className="w-5 h-5 text-secondary animate-pulse" />
+                {language === "fr" ? "Recharger des Crédits" : "Top Up Credits"}
+              </h3>
+              <p className="text-xs text-gray-400 mt-1">
+                {language === "fr" ? "Ajoutez instantanément des jetons à votre balance pour continuer à forger." : "Instantly add tokens to your balance to keep forging."}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button 
+                onClick={() => handleBuyCredits(50, "19.00 €")}
+                disabled={checkoutLoading !== null}
+                className="p-5 border border-border hover:border-primary rounded-2xl flex flex-col items-center gap-2 cursor-pointer bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-center"
+              >
+                <span className="text-sm font-black text-white font-display">50 {language === "fr" ? "crédits" : "credits"}</span>
+                <span className="text-xs font-bold text-secondary">19.00 €</span>
+              </button>
+
+              <button 
+                onClick={() => handleBuyCredits(150, "49.00 €")}
+                disabled={checkoutLoading !== null}
+                className="p-5 border border-border hover:border-primary rounded-2xl flex flex-col items-center gap-2 cursor-pointer bg-white/5 hover:bg-white/10 active:scale-95 transition-all text-center"
+              >
+                <span className="text-sm font-black text-white font-display">150 {language === "fr" ? "crédits" : "credits"}</span>
+                <span className="text-xs font-bold text-secondary">49.00 €</span>
+              </button>
+            </div>
+            
+            {checkoutLoading === "credits" && (
+              <div className="flex justify-center items-center gap-2 text-xs font-bold text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin text-secondary" />
+                {language === "fr" ? "Simulation de la passerelle Stripe..." : "Simulating Stripe Checkout..."}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
