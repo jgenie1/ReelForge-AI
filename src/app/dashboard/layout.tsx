@@ -159,7 +159,9 @@ export default function DashboardLayout({
           </button>
 
           <div className="flex items-center gap-4">
-            <span className="text-xs text-gray-400 font-medium">{t("menu.sandbox")}</span>
+            <span className="text-xs text-gray-400 font-medium">
+              {process.env.NEXT_PUBLIC_USE_MOCK_AI === "false" ? t("menu.real") : t("menu.sandbox")}
+            </span>
             <div className="w-8 h-8 rounded-full bg-primary/20 border border-primary/40 flex items-center justify-center text-primary text-xs font-black">
               C
             </div>

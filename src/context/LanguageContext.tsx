@@ -44,6 +44,7 @@ const TRANSLATIONS = {
     "menu.credits": "Solde de Crédits",
     "menu.recharge": "Recharger des crédits",
     "menu.sandbox": "Mode Sandbox",
+    "menu.real": "Mode Réel",
 
     // Dashboard page
     "dash.title": "Tableau de Bord ReelForge",
@@ -208,6 +209,7 @@ const TRANSLATIONS = {
     "menu.credits": "Credit Balance",
     "menu.recharge": "Recharge credits",
     "menu.sandbox": "Sandbox Mode",
+    "menu.real": "Real Mode",
 
     // Dashboard page
     "dash.title": "ReelForge Dashboard",
