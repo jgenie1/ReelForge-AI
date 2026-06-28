@@ -43,11 +43,8 @@ export default function SettingsPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // Form states
-  const [claudeKey, setClaudeKey] = useState("sk-ant-••••••••••••••••");
-  const [elevenLabsKey, setElevenLabsKey] = useState("eleven_••••••••••••••••");
-  const [replicateKey, setReplicateKey] = useState("r8_••••••••••••••••");
-  const [openaiKey, setOpenaiKey] = useState("sk-••••••••••••••••");
+  const [geminiKey, setGeminiKey] = useState("AIzaSy-••••••••••••••••");
+  const [elevenLabsKey, setElevenLabsKey] = useState("sk_fb6f-••••••••••••••••");
 
   const [voiceProfileName, setVoiceProfileName] = useState("");
   const [voices, setVoices] = useState([
@@ -149,11 +146,11 @@ export default function SettingsPage() {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-bold text-gray-300 uppercase">Anthropic Claude API Key</label>
+                  <label className="text-[10px] font-bold text-gray-300 uppercase">Google Gemini API Key</label>
                   <input 
                     type="password" 
-                    value={claudeKey} 
-                    onChange={(e) => setClaudeKey(e.target.value)}
+                    value={geminiKey} 
+                    onChange={(e) => setGeminiKey(e.target.value)}
                     className="bg-background border border-border focus:border-primary rounded-xl p-3 text-xs text-white outline-none" 
                   />
                 </div>
@@ -163,27 +160,6 @@ export default function SettingsPage() {
                     type="password" 
                     value={elevenLabsKey} 
                     onChange={(e) => setElevenLabsKey(e.target.value)}
-                    className="bg-background border border-border focus:border-primary rounded-xl p-3 text-xs text-white outline-none" 
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-bold text-gray-300 uppercase">Replicate (SDXL) API Key</label>
-                  <input 
-                    type="password" 
-                    value={replicateKey} 
-                    onChange={(e) => setReplicateKey(e.target.value)}
-                    className="bg-background border border-border focus:border-primary rounded-xl p-3 text-xs text-white outline-none" 
-                  />
-                </div>
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-bold text-gray-300 uppercase">OpenAI (Whisper) API Key</label>
-                  <input 
-                    type="password" 
-                    value={openaiKey} 
-                    onChange={(e) => setOpenaiKey(e.target.value)}
                     className="bg-background border border-border focus:border-primary rounded-xl p-3 text-xs text-white outline-none" 
                   />
                 </div>

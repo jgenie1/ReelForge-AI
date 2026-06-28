@@ -91,7 +91,7 @@ export async function POST(req: Request) {
           data: {
             userId: dbUser.id,
             title: topic ? `Sujet: ${topic.slice(0, 30)}...` : `Série ${niche}`,
-            script: customScript || "En attente du script Claude API...",
+            script: customScript || "En attente du script Gemini API...",
             niche,
             style,
             tone,

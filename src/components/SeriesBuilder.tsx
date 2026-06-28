@@ -429,7 +429,7 @@ export default function SeriesBuilder() {
             <div className="flex flex-col gap-6 text-left">
               <div>
                 <h3 className="text-lg font-bold text-white mb-1">
-                  {activeLang === "fr" ? "Moteur de Script IA (Claude)" : "AI Script Engine (Claude)"}
+                  {activeLang === "fr" ? "Moteur de Script IA (Gemini)" : "AI Script Engine (Gemini)"}
                 </h3>
                 <p className="text-xs text-gray-400">
                   {activeLang === "fr" ? "Définissez la ligne directrice, le ton et la langue de la narration." : "Define the guideline, tone, and language of the narration."}
@@ -444,7 +444,7 @@ export default function SeriesBuilder() {
                     scriptMode === "auto" ? "bg-primary text-white" : "text-gray-400 hover:text-white"
                   }`}
                 >
-                  {activeLang === "fr" ? "Génération par IA (Claude)" : "AI Generation (Claude)"}
+                  {activeLang === "fr" ? "Génération par IA (Gemini)" : "AI Generation (Gemini)"}
                 </button>
                 <button 
                   onClick={() => setScriptMode("custom")}

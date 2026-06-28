@@ -18,7 +18,7 @@ const PLANS = [
     desc: "Parfait pour tester la puissance de la forge IA.",
     features: [
       "50 vidéos courtes par mois",
-      "Qualité SDXL / Claude 3.5 Sonnet",
+      "Qualité Imagen 3 / Gemini 1.5 Pro",
       "Voix ElevenLabs standard",
       "Publication manuelle (téléchargement .mp4)"
     ],
@@ -121,7 +121,7 @@ export default function BillingHub() {
       switch (name) {
         case "Starter": return [
           "50 short videos per month",
-          "SDXL / Claude 3.5 Sonnet quality",
+          "Imagen 3 / Gemini 1.5 Pro quality",
           "Standard ElevenLabs voices",
           "Manual publishing (mp4 download)"
         ];

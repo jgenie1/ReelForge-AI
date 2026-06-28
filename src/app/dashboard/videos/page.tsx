@@ -212,13 +212,13 @@ export default function SingleVideoGenerator() {
   const getStepText = () => {
     switch (videoStatus) {
       case "PENDING": return currentLang === "fr" ? "Initialisation de la tâche..." : "Initializing task...";
-      case "SCRIPT_DONE": return currentLang === "fr" ? "Script rédigé par Claude... Génération de la voix..." : "Script written by Claude... Generating voice...";
+      case "SCRIPT_DONE": return currentLang === "fr" ? "Script rédigé par Gemini... Génération de la voix..." : "Script written by Gemini... Generating voice...";
       case "VOICE_DONE": return currentLang === "fr" ? "Voix ElevenLabs générée... Rendu des visuels..." : "ElevenLabs voice generated... Rendering visuals...";
-      case "IMAGES_DONE": return currentLang === "fr" ? "Frames SDXL prêtes... Alignement des sous-titres..." : "SDXL frames ready... Aligning subtitles...";
-      case "CAPTIONS_DONE": return currentLang === "fr" ? "Whisper calé... Rendu vidéo FFmpeg final..." : "Whisper aligned... Final FFmpeg video rendering...";
+      case "IMAGES_DONE": return currentLang === "fr" ? "Frames Imagen 3 prêtes... Alignement des sous-titres..." : "Imagen 3 frames ready... Aligning subtitles...";
+      case "CAPTIONS_DONE": return currentLang === "fr" ? "Sous-titres Gemini calés... Rendu vidéo FFmpeg final..." : "Gemini subtitles aligned... Final FFmpeg video rendering...";
       case "RENDERING": return currentLang === "fr" ? `Composition vidéo en cours (${progress}%)...` : `Video composition in progress (${progress}%)...`;
       case "COMPLETED": return currentLang === "fr" ? "Vidéo disponible !" : "Video available!";
-      case "FAILED": return currentLang === "fr" ? "Échec du pipeline." : "Pipeline failed.";
+      case "FAILED": return currentLang === "fr" ? "Échec du pipeline d'IA." : "AI Pipeline failed.";
       default: return currentLang === "fr" ? "Forge active..." : "Forge active...";
     }
   };
@@ -291,7 +291,7 @@ export default function SingleVideoGenerator() {
                       scriptMode === "auto" ? "bg-primary text-white" : "text-gray-400 hover:text-white"
                     }`}
                   >
-                    {currentLang === "fr" ? "Génération par IA (Claude)" : "AI Generation (Claude)"}
+                    {currentLang === "fr" ? "Génération par IA (Gemini)" : "AI Generation (Gemini)"}
                   </button>
                   <button 
                     type="button"

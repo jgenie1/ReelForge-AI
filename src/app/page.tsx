@@ -405,7 +405,7 @@ export default function LandingPage() {
               <div className="flex flex-col gap-6">
                 <div>
                   <h3 className="text-lg font-bold text-white mb-1">{language === "fr" ? "Étape 3 : Donnez un sujet d'inspiration à l'IA" : "Step 3: Give an inspiration topic to the AI"}</h3>
-                  <p className="text-xs text-gray-400">{language === "fr" ? "Le script complet et accrocheur sera forgé par Claude API." : "The complete and catchy script will be forged by Claude API."}</p>
+                  <p className="text-xs text-gray-400">{language === "fr" ? "Le script complet et accrocheur sera forgé par Gemini API." : "The complete and catchy script will be forged by Gemini API."}</p>
                 </div>
 
                 <div className="flex flex-col gap-2">
