@@ -1,7 +1,7 @@
 import { Worker, Job } from "bullmq";
 import { prisma } from "../lib/db";
 import { connectionOptions } from "../lib/queue";
-import { uploadToR2 } from "../lib/storage";
+import { uploadToFirebase } from "../lib/storage";
 import { exec } from "child_process";
 import fs from "fs";
 import path from "path";
@@ -37,17 +37,17 @@ async function createJobProgress(videoId: string, status: any, progress: number,
   }
 }
 
-// 1. Claude script generation helper
-async function callClaudeAPI(
+// 1. Gemini script generation helper
+async function callGeminiScript(
   topic: string,
   niche: string,
   tone: string,
   duration: number,
   language: string
 ): Promise<string> {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing ANTHROPIC_API_KEY environment variable");
+    throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
   const prompt = `Write a short narration script for a 9:16 vertical video of approximately ${duration} seconds in the "${niche}" niche.
@@ -60,29 +60,25 @@ Requirements:
 - Do NOT include any scene descriptions, stage directions, bracketed comments, tags, or formatting.
 - The script should be engaging, formatted as a continuous spoken paragraph, and fit the ${duration}-second limit.`;
 
-  const response = await fetch("https://api.anthropic.com/v1/messages", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: {
-      "x-api-key": apiKey,
-      "anthropic-version": "2023-06-01",
       "content-type": "application/json",
     },
     body: JSON.stringify({
-      model: "claude-3-haiku-20240307",
-      max_tokens: 1000,
-      messages: [{ role: "user", content: prompt }],
+      contents: [{ parts: [{ text: prompt }] }],
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Claude API error: ${response.statusText} - ${errorText}`);
+    throw new Error(`Gemini API script error: ${response.statusText} - ${errorText}`);
   }
 
   const data = await response.json();
-  const text = data.content?.[0]?.text;
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
   if (!text) {
-    throw new Error("No script text returned from Claude API");
+    throw new Error("No script text returned from Gemini API");
   }
 
   return text.trim();
@@ -136,113 +132,128 @@ function segmentScript(script: string, count: number = 3): string[] {
   return segments.slice(0, count);
 }
 
-// 3. Replicate SDXL image generation helpers
-async function generateSingleImage(promptText: string, style: string): Promise<string> {
-  const apiKey = process.env.REPLICATE_API_KEY;
+// 3. Gemini Imagen image generation helpers
+async function generateSingleImage(promptText: string, style: string, index: number, videoId: string): Promise<string> {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing REPLICATE_API_KEY environment variable");
+    throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
   const styledPrompt = `${promptText}, ${style} style, 9:16 portrait ratio, highly detailed, cinematic lighting, 8k resolution`;
 
-  const response = await fetch("https://api.replicate.com/v1/models/stability-ai/sdxl/predictions", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/imagen-3.0-generate-002:predict?key=${apiKey}`, {
     method: "POST",
     headers: {
-      "Authorization": `Token ${apiKey}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
-      input: {
-        prompt: styledPrompt,
-        negative_prompt: "text, watermark, logo, blurry, ugly, deformed, bad anatomy",
-        aspect_ratio: "9:16",
-      },
+      instances: [
+        {
+          prompt: styledPrompt,
+        }
+      ],
+      parameters: {
+        sampleCount: 1,
+        aspectRatio: "9:16",
+        outputMimeType: "image/jpeg"
+      }
     }),
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`Replicate API error: ${response.statusText} - ${errorText}`);
+    throw new Error(`Gemini Imagen API error: ${response.statusText} - ${errorText}`);
   }
 
-  const prediction = await response.json();
-  const pollUrl = prediction.urls.get;
-
-  let status = prediction.status;
-  let resultUrl = "";
-  const startTime = Date.now();
-  const timeout = 60000;
-
-  while (status !== "succeeded" && status !== "failed" && status !== "canceled") {
-    if (Date.now() - startTime > timeout) {
-      throw new Error("Replicate image generation timed out");
-    }
-    await new Promise(resolve => setTimeout(resolve, 1500));
-    
-    const pollResponse = await fetch(pollUrl, {
-      headers: { "Authorization": `Token ${apiKey}` },
-    });
-    const pollData = await pollResponse.json();
-    status = pollData.status;
-    if (status === "succeeded") {
-      resultUrl = pollData.output[0];
-    } else if (status === "failed" || status === "canceled") {
-      throw new Error(`Replicate prediction failed: ${pollData.error}`);
-    }
+  const data = await response.json();
+  const base64Bytes = data.predictions?.[0]?.bytesBase64Encoded;
+  if (!base64Bytes) {
+    throw new Error("No image data returned from Gemini Imagen API");
   }
 
-  return resultUrl;
+  const imageBuffer = Buffer.from(base64Bytes, "base64");
+  const imageKey = `images/scene-${videoId}-${index}.jpg`;
+  
+  return uploadToFirebase(imageBuffer, imageKey, "image/jpeg");
 }
 
-async function callSDXLAPI(script: string, style: string): Promise<string[]> {
+async function callImagenAPI(script: string, style: string, videoId: string): Promise<string[]> {
   const segments = segmentScript(script, 3);
-  console.log(`[WORKER] Generating ${segments.length} images in parallel via Replicate...`);
+  console.log(`[WORKER] Generating ${segments.length} images in parallel via Gemini Imagen...`);
   return Promise.all(
     segments.map((promptText, idx) => {
       console.log(`[WORKER] Starting image generation ${idx + 1}/${segments.length}`);
-      return generateSingleImage(promptText, style);
+      return generateSingleImage(promptText, style, idx + 1, videoId);
     })
   );
 }
 
-// 4. OpenAI Whisper word-level timestamps helper
-async function callWhisperTranscription(audioBuffer: Buffer): Promise<SubtitleWord[]> {
-  const apiKey = process.env.OPENAI_API_KEY;
+// 4. Gemini 1.5 Flash audio transcription with timestamps helper
+async function callGeminiTranscription(audioBuffer: Buffer): Promise<SubtitleWord[]> {
+  const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
-    throw new Error("Missing OPENAI_API_KEY environment variable");
+    throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
-  const formData = new FormData();
-  const audioBlob = new Blob([new Uint8Array(audioBuffer)], { type: "audio/mpeg" });
-  formData.append("file", audioBlob, "voiceover.mp3");
-  formData.append("model", "whisper-1");
-  formData.append("response_format", "verbose_json");
-  formData.append("timestamp_granularities[]", "word");
+  const base64Audio = audioBuffer.toString("base64");
 
-  const response = await fetch("https://api.openai.com/v1/audio/transcriptions", {
+  const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: "POST",
     headers: {
-      "Authorization": `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
     },
-    body: formData,
+    body: JSON.stringify({
+      contents: [
+        {
+          parts: [
+            {
+              text: `Transcribe this audio file and return a JSON array of words. Every single word in the audio must be transcribed with its start and end timestamps.
+You must output a JSON array of objects with the exact structure:
+[
+  { "word": "text", "start": number (seconds), "end": number (seconds) }
+]
+Ensure the response is a valid JSON array of word objects and contains nothing else.`
+            },
+            {
+              inlineData: {
+                mimeType: "audio/mp3",
+                data: base64Audio
+              }
+            }
+          ]
+        }
+      ],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
+    })
   });
 
   if (!response.ok) {
     const errorText = await response.text();
-    throw new Error(`OpenAI Whisper API error: ${response.statusText} - ${errorText}`);
+    throw new Error(`Gemini Transcription API error: ${response.statusText} - ${errorText}`);
   }
 
   const data = await response.json();
-  const words = data.words;
-  if (!words || !Array.isArray(words)) {
-    throw new Error("Whisper API did not return word-level timestamps");
+  const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+  if (!text) {
+    throw new Error("No transcription text returned from Gemini API");
   }
 
-  return words.map((w: any) => ({
-    word: w.word,
-    start: w.start,
-    end: w.end,
-  }));
+  try {
+    const subtitles = JSON.parse(text.trim());
+    if (!Array.isArray(subtitles)) {
+      throw new Error("Gemini API transcription response is not a JSON array");
+    }
+    return subtitles.map((w: any) => ({
+      word: w.word,
+      start: Number(w.start),
+      end: Number(w.end)
+    }));
+  } catch (parseError: any) {
+    console.error("❌ Failed to parse Gemini transcription JSON:", text);
+    throw new Error(`Gemini transcription parse error: ${parseError.message}`);
+  }
 }
 
 // 5. Remotion CLI rendering helper
@@ -318,7 +329,7 @@ export async function runMockPipeline(videoId: string) {
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "VOICE_DONE", voiceUrl: "https://pub-reelforge.r2.dev/mock-voiceover.mp3" }
+      data: { status: "VOICE_DONE", voiceUrl: "https://storage.googleapis.com/mock-reelforge-bucket/mock-voiceover.mp3" }
     });
     await createJobProgress(videoId, "VOICE_DONE", 30);
     await sleep(1000);
@@ -344,7 +355,7 @@ export async function runMockPipeline(videoId: string) {
     await createJobProgress(videoId, "CAPTIONS_DONE", 60);
     await sleep(1000);
 
-    await prisma.video.update({ data: { musicUrl: "https://pub-reelforge.r2.dev/mock-background-ambient.mp3" }, where: { id: videoId } });
+    await prisma.video.update({ data: { musicUrl: "https://storage.googleapis.com/mock-reelforge-bucket/mock-background-ambient.mp3" }, where: { id: videoId } });
     await createJobProgress(videoId, "RENDERING", 75);
     await sleep(1000);
 
@@ -353,7 +364,7 @@ export async function runMockPipeline(videoId: string) {
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "COMPLETED", videoUrl: "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4" }
+      data: { status: "COMPLETED", videoUrl: "https://storage.googleapis.com/mock-reelforge-bucket/rendered-result-sahara.mp4" }
     });
     await createJobProgress(videoId, "COMPLETED", 100);
     console.log(`[MOCK WORKER] Pipeline completed successfully for Video ${videoId}!`);
@@ -380,8 +391,8 @@ export async function runProductionPipeline(
   const { topic, niche, style, tone, duration, language, voice } = data;
   try {
     // 1. Generate Script
-    console.log(`[WORKER] Step 1: Generating script via Claude...`);
-    const script = await callClaudeAPI(topic, niche, tone, duration, language);
+    console.log(`[WORKER] Step 1: Generating script via Gemini...`);
+    const script = await callGeminiScript(topic, niche, tone, duration, language);
     await prisma.video.update({
       where: { id: videoId },
       data: { script, status: "SCRIPT_DONE", viralScore: Math.floor(Math.random() * 20) + 75 }
@@ -393,7 +404,7 @@ export async function runProductionPipeline(
     console.log(`[WORKER] Step 2: Synthesizing voice via ElevenLabs...`);
     const voiceBuffer = await callElevenLabsTTS(script, voice);
     const voiceKey = `voices/voice-${videoId}.mp3`;
-    const voiceUrl = await uploadToR2(voiceBuffer, voiceKey, "audio/mpeg");
+    const voiceUrl = await uploadToFirebase(voiceBuffer, voiceKey, "audio/mpeg");
     await prisma.video.update({
       where: { id: videoId },
       data: { voiceUrl, status: "VOICE_DONE" }
@@ -402,8 +413,8 @@ export async function runProductionPipeline(
     if (onProgress) await onProgress(30);
 
     // 3. Generate Images
-    console.log(`[WORKER] Step 3: Generating images via SDXL...`);
-    const imageUrls = await callSDXLAPI(script, style);
+    console.log(`[WORKER] Step 3: Generating images via Gemini Imagen...`);
+    const imageUrls = await callImagenAPI(script, style, videoId);
     await prisma.video.update({
       where: { id: videoId },
       data: { status: "IMAGES_DONE" }
@@ -412,8 +423,8 @@ export async function runProductionPipeline(
     if (onProgress) await onProgress(45);
 
     // 4. Generate Subtitles
-    console.log(`[WORKER] Step 4: Transcribing voice via Whisper...`);
-    const subtitles = await callWhisperTranscription(voiceBuffer);
+    console.log(`[WORKER] Step 4: Transcribing voice via Gemini Multimodal...`);
+    const subtitles = await callGeminiTranscription(voiceBuffer);
     await prisma.video.update({
       where: { id: videoId },
       data: { subtitles: subtitles as any, status: "CAPTIONS_DONE" }
@@ -427,11 +438,11 @@ export async function runProductionPipeline(
     await createJobProgress(videoId, "RENDERING", 85);
     if (onProgress) await onProgress(85);
 
-    // 6. Upload final MP4 to R2
-    console.log(`[WORKER] Step 6: Uploading MP4 to R2...`);
+    // 6. Upload final MP4 to Firebase Storage
+    console.log(`[WORKER] Step 6: Uploading MP4 to Firebase Storage...`);
     const finalVideoBuffer = fs.readFileSync(localVideoPath);
     const videoKey = `rendered/video-${videoId}.mp4`;
-    const finalVideoUrl = await uploadToR2(finalVideoBuffer, videoKey, "video/mp4");
+    const finalVideoUrl = await uploadToFirebase(finalVideoBuffer, videoKey, "video/mp4");
     
     await prisma.video.update({
       where: { id: videoId },

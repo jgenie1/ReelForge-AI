@@ -1,53 +1,61 @@
-import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
+import { initializeApp, getApps, cert } from "firebase-admin/app";
+import { getStorage } from "firebase-admin/storage";
 
-const accountId = process.env.R2_ACCOUNT_ID;
-const accessKeyId = process.env.R2_ACCESS_KEY_ID;
-const secretAccessKey = process.env.R2_SECRET_ACCESS_KEY;
-const bucketName = process.env.R2_BUCKET_NAME;
-const publicUrl = process.env.R2_PUBLIC_URL;
+const projectId = process.env.FIREBASE_PROJECT_ID;
+const clientEmail = process.env.FIREBASE_CLIENT_EMAIL;
+const privateKey = process.env.FIREBASE_PRIVATE_KEY;
+const bucketName = process.env.FIREBASE_STORAGE_BUCKET;
 
-const isS3Configured = !!(accountId && accessKeyId && secretAccessKey && bucketName && publicUrl);
+const isFirebaseConfigured = !!(
+  projectId &&
+  clientEmail &&
+  privateKey &&
+  privateKey !== "your-private-key" &&
+  bucketName
+);
 
-let s3Client: S3Client | null = null;
-
-if (isS3Configured) {
-  s3Client = new S3Client({
-    region: "auto",
-    endpoint: `https://${accountId}.r2.cloudflarestorage.com`,
-    credentials: {
-      accessKeyId: accessKeyId!,
-      secretAccessKey: secretAccessKey!,
-    },
-  });
-} else {
-  console.warn("⚠️ Cloudflare R2 credentials missing. S3 client will run in mock mode.");
+if (isFirebaseConfigured && getApps().length === 0) {
+  try {
+    initializeApp({
+      credential: cert({
+        projectId,
+        clientEmail,
+        privateKey: privateKey!.replace(/\\n/g, "\n"),
+      }),
+      storageBucket: bucketName,
+    });
+    console.log("🚀 Firebase Admin initialized successfully.");
+  } catch (error) {
+    console.error("❌ Failed to initialize Firebase Admin SDK:", error);
+  }
+} else if (!isFirebaseConfigured) {
+  console.warn("⚠️ Firebase Storage credentials missing or running in sandbox mode. Storage will fall back to mock uploads.");
 }
 
+const bucket = isFirebaseConfigured ? getStorage().bucket() : null;
+
 /**
- * Uploads a file buffer to Cloudflare R2 and returns its public URL.
+ * Uploads a file buffer to Firebase Storage and returns its public URL.
  */
-export async function uploadToR2(
+export async function uploadToFirebase(
   fileBuffer: Buffer,
   key: string,
   contentType: string
 ): Promise<string> {
-  if (!isS3Configured || !s3Client) {
-    console.log(`[MOCK STORAGE] Mock upload for key: ${key}`);
-    return `https://pub-reelforge.r2.dev/${key}`;
+  if (!isFirebaseConfigured || !bucket) {
+    console.log(`[MOCK STORAGE] Mock Firebase upload for key: ${key}`);
+    return `https://storage.googleapis.com/mock-reelforge-bucket/${key}`;
   }
 
   try {
-    await s3Client.send(
-      new PutObjectCommand({
-        Bucket: bucketName!,
-        Key: key,
-        Body: fileBuffer,
-        ContentType: contentType,
-      })
-    );
-    return `${publicUrl}/${key}`;
+    const file = bucket.file(key);
+    await file.save(fileBuffer, {
+      metadata: { contentType },
+      public: true, // Make publicly readable
+    });
+    return `https://storage.googleapis.com/${bucket.name}/${key}`;
   } catch (error) {
-    console.error(`❌ Failed to upload ${key} to Cloudflare R2:`, error);
+    console.error(`❌ Failed to upload ${key} to Firebase Storage:`, error);
     throw error;
   }
 }
