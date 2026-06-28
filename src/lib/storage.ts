@@ -11,6 +11,7 @@ const isFirebaseConfigured = !!(
   clientEmail &&
   privateKey &&
   privateKey !== "your-private-key" &&
+  !privateKey.includes("MIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQC7") &&
   bucketName
 );
 
@@ -32,7 +33,9 @@ if (isFirebaseConfigured && getApps().length === 0) {
   console.warn("⚠️ Firebase Storage credentials missing or running in sandbox mode. Storage will fall back to mock uploads.");
 }
 
-const bucket = isFirebaseConfigured ? getStorage().bucket() : null;
+// CRITICAL: Protect against unhandled startup crashes if initializeApp failed or was skipped.
+// Only call getStorage() if at least one firebase app is successfully registered.
+const bucket = (isFirebaseConfigured && getApps().length > 0) ? getStorage().bucket() : null;
 
 /**
  * Uploads a file buffer to Firebase Storage and returns its public URL.
