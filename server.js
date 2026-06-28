@@ -1,6 +1,21 @@
 const { createServer } = require("http");
 const { parse } = require("url");
 const next = require("next");
+const path = require("path");
+const fs = require("fs");
+
+// Automatically create symlink on Hostinger/Linux startup to resolve asset 404s/503s
+if (process.platform !== "win32") {
+  const link = path.join(__dirname, "public/_next");
+  if (!fs.existsSync(link)) {
+    try {
+      fs.symlinkSync("../.next", link, "dir");
+      console.log("✅ Created startup symlink: public/_next -> ../.next");
+    } catch (err) {
+      console.error("⚠️ Failed to create startup symlink:", err.message);
+    }
+  }
+}
 
 const dev = process.env.NODE_ENV !== "production";
 const hostname = "localhost";
