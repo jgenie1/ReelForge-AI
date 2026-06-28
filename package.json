@@ -5,6 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3080",
     "build": "next build",
+    "postbuild": "node scripts/create-symlink.js",
     "start": "node server.js",
     "lint": "next lint",
     "prisma:generate": "prisma generate",
