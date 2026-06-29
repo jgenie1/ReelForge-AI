@@ -329,10 +329,10 @@ export async function runMockPipeline(videoId: string) {
         status: "SCRIPT_DONE",
         script: "HOOK: Le savais-tu ? Sous le sable du désert du Sahara repose un secret terrifiant. NARRATION: Il y a 5000 ans, cette zone était recouverte d'un lac gigantesque. Des créatures marines de plus de 15 mètres y régnaient en maîtres. CTA: Abonne-toi pour découvrir la suite des mystères de l'histoire !",
         viralScore: 84,
-        suggestions: [
+        suggestions: JSON.stringify([
           "Le titre d'accroche 'Le secret terrifiant du Sahara' a un fort taux de clic.",
           "Augmenter l'emphase dramatique sur la taille des créatures marines."
-        ]
+        ])
       }
     });
     await createJobProgress(videoId, "SCRIPT_DONE", 15);
@@ -361,7 +361,7 @@ export async function runMockPipeline(videoId: string) {
     ];
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "CAPTIONS_DONE", subtitles: mockSubtitles as any }
+      data: { status: "CAPTIONS_DONE", subtitles: JSON.stringify(mockSubtitles) }
     });
     await createJobProgress(videoId, "CAPTIONS_DONE", 60);
     await sleep(1000);
@@ -438,7 +438,7 @@ export async function runProductionPipeline(
     const subtitles = await callGeminiTranscription(voiceBuffer);
     await prisma.video.update({
       where: { id: videoId },
-      data: { subtitles: subtitles as any, status: "CAPTIONS_DONE" }
+      data: { subtitles: JSON.stringify(subtitles), status: "CAPTIONS_DONE" }
     });
     await createJobProgress(videoId, "CAPTIONS_DONE", 60);
     if (onProgress) await onProgress(60);

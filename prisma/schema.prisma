@@ -1,5 +1,5 @@
 datasource db {
-  provider = "postgresql"
+  provider = "sqlite"
   url      = env("DATABASE_URL")
 }
 
@@ -7,50 +7,11 @@ generator client {
   provider = "prisma-client-js"
 }
 
-enum SubscriptionPlan {
-  FREE
-  STARTER
-  CREATOR
-  PRO
-  AGENCE
-}
-
-enum VideoStatus {
-  PENDING
-  SCRIPT_DONE
-  VOICE_DONE
-  IMAGES_DONE
-  CAPTIONS_DONE
-  RENDERING
-  COMPLETED
-  FAILED
-}
-
-enum JobType {
-  SINGLE_VIDEO
-  SERIES_VIDEO
-}
-
-enum Platform {
-  TIKTOK
-  INSTAGRAM
-  YOUTUBE
-  PINTEREST
-  SNAPCHAT
-  X
-}
-
-enum VoiceStatus {
-  PROCESSING
-  READY
-  FAILED
-}
-
 model User {
   id             String         @id @default(uuid())
   email          String         @unique
   clerkId        String         @unique
-  credits        Int            @default(10) // Starter gets 10, free get 3 or similar
+  credits        Int            @default(10)
   createdAt      DateTime       @default(now())
   updatedAt      DateTime       @updatedAt
   
@@ -68,7 +29,7 @@ model Subscription {
   id                     String           @id @default(uuid())
   userId                 String           @unique
   user                   User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  plan                   SubscriptionPlan @default(FREE)
+  plan                   String           @default("FREE") // "FREE", "STARTER", "CREATOR", "PRO", "AGENCE"
   status                 String           // "active", "canceled", "incomplete"
   stripeSubscriptionId   String?          @unique
   stripeCustomerId       String?
@@ -81,7 +42,7 @@ model CreditsLog {
   id             String   @id @default(uuid())
   userId         String
   user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  creditsChanged Int      // e.g. -1 for video, +50 for pack purchase
+  creditsChanged Int      
   reason         String   // "VIDEO_GENERATION", "PACK_PURCHASE", "REFUND"
   createdAt      DateTime @default(now())
 }
@@ -91,21 +52,21 @@ model Video {
   userId         String
   user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   title          String
-  script         String               @db.Text
+  script         String               
   niche          String
-  style          String               // Anime, Realistic, Illustration, etc.
-  tone           String               // Mysterious, Educational, Inspiring, etc.
-  duration       Int                  // in seconds: 15, 30, 45, 60, 90
-  language       String               // French, Haitian Creole, English, etc.
+  style          String               
+  tone           String               
+  duration       Int                  
+  language       String               
   
-  status         VideoStatus          @default(PENDING)
-  videoUrl       String?              // R2 url
-  voiceUrl       String?              // ElevenLabs or offline audio url
-  subtitles      Json?                // Whisper timestamps & words JSON
-  musicUrl       String?              // Suno / stock background music
+  status         String               @default("PENDING") // PENDING, SCRIPT_DONE, VOICE_DONE, IMAGES_DONE, CAPTIONS_DONE, RENDERING, COMPLETED, FAILED
+  videoUrl       String?              
+  voiceUrl       String?              
+  subtitles      String?              // Stored as JSON string in SQLite
+  musicUrl       String?              
   
-  viralScore     Int?                 // 0-100 score
-  suggestions    Json?                // Array of hook suggestions / script improvements
+  viralScore     Int?                 
+  suggestions    String?              // Stored as JSON string in SQLite
   
   seriesId       String?
   series         Series?              @relation(fields: [seriesId], references: [id], onDelete: SetNull)
@@ -120,10 +81,10 @@ model VideoJob {
   id          String      @id @default(uuid())
   videoId     String
   video       Video       @relation(fields: [videoId], references: [id], onDelete: Cascade)
-  jobType     JobType     @default(SINGLE_VIDEO)
-  progress    Int         @default(0) // 0-100 percentage
-  status      VideoStatus @default(PENDING)
-  error       String?     @db.Text
+  jobType     String      @default("SINGLE_VIDEO") // SINGLE_VIDEO, SERIES_VIDEO
+  progress    Int         @default(0) 
+  status      String      @default("PENDING")
+  error       String?     
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
 }
@@ -146,10 +107,10 @@ model Channel {
   id             String    @id @default(uuid())
   userId         String
   user           User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  platform       Platform
+  platform       String    // TIKTOK, INSTAGRAM, YOUTUBE, PINTEREST, SNAPCHAT, X
   accountName    String
-  accessToken    String    @db.Text
-  refreshToken   String?   @db.Text
+  accessToken    String    
+  refreshToken   String?   
   tokenExpiresAt DateTime?
   watermarkUrl   String?
   createdAt      DateTime  @default(now())
@@ -162,8 +123,8 @@ model Template {
   user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
   name           String
   previewUrl     String?
-  remotionConfig Json                 // Style parameters (fonts, colors, transitions)
-  priceCredits   Int                  @default(0) // 0 for free
+  remotionConfig String               // Stored as JSON string in SQLite
+  priceCredits   Int                  @default(0) 
   isPublic       Boolean              @default(false)
   rating         Float                @default(5.0)
   listings       MarketplaceListing[]
@@ -198,10 +159,10 @@ model VoiceClone {
   id        String      @id @default(uuid())
   userId    String
   user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  voiceId   String      @unique // ElevenLabs voice ID
+  voiceId   String      @unique 
   name      String
   sampleUrl String
-  status    VoiceStatus @default(PROCESSING)
+  status    String      @default("PROCESSING") // PROCESSING, READY, FAILED
   createdAt DateTime    @default(now())
   updatedAt DateTime    @updatedAt
 }

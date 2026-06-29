@@ -87,9 +87,9 @@ export async function GET(
         videoUrl: video.videoUrl,
         voiceUrl: video.voiceUrl,
         musicUrl: video.musicUrl,
-        subtitles: video.subtitles,
+        subtitles: video.subtitles ? JSON.parse(video.subtitles) : null,
         viralScore: video.viralScore,
-        suggestions: video.suggestions,
+        suggestions: video.suggestions ? JSON.parse(video.suggestions) : null,
         updatedAt: video.updatedAt
       }, { status: 200 });
 
