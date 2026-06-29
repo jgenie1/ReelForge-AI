@@ -1,4 +1,4 @@
-"use strict";exports.id=705,exports.ids=[705],exports.modules={60664:(e,t,r)=>{r.d(t,{Z:()=>u});var n=r(17577);/**
+"use strict";exports.id=705,exports.ids=[705],exports.modules={62881:(e,t,r)=>{r.d(t,{Z:()=>u});var n=r(17577);/**
  * @license lucide-react v0.378.0 - ISC
  *
  * This source code is licensed under the ISC license.

@@ -37,9 +37,9 @@ export async function GET(
         status,
         progress,
         error: null,
-        videoUrl: progress >= 100 ? "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4" : null,
-        voiceUrl: progress >= 25 ? "https://pub-reelforge.r2.dev/mock-voice.mp3" : null,
-        musicUrl: "https://pub-reelforge.r2.dev/mock-music.mp3",
+        videoUrl: progress >= 100 ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" : null,
+        voiceUrl: progress >= 25 ? "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" : null,
+        musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
         subtitles: progress >= 80 ? [
           { word: "Bienvenue", start: 0.1, end: 0.8 },
           { word: "dans", start: 0.9, end: 1.2 },
@@ -102,9 +102,9 @@ export async function GET(
         status: "COMPLETED",
         progress: 100,
         error: null,
-        videoUrl: "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4",
-        voiceUrl: "https://pub-reelforge.r2.dev/mock-voice.mp3",
-        musicUrl: "https://pub-reelforge.r2.dev/mock-music.mp3",
+        videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        voiceUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
+        musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
         subtitles: [
           { word: "Bienvenue", start: 0.1, end: 0.8 },
           { word: "dans", start: 0.9, end: 1.2 }

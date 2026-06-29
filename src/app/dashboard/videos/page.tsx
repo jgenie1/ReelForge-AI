@@ -488,7 +488,7 @@ export default function SingleVideoGenerator() {
                       src={renderedUrl} 
                       controls 
                       className="w-full h-full object-cover" 
-                      poster="https://pub-reelforge.r2.dev/mock-poster.jpg"
+                      poster="https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=500&auto=format&fit=crop"
                     />
                   </div>
                 </div>

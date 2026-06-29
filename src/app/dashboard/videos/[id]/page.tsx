@@ -59,7 +59,7 @@ const DEFAULT_MOCK_VIDEO: VideoDetails = {
   style: "Cinématique SDXL",
   duration: 30,
   status: "COMPLETED",
-  videoUrl: "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4",
+  videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
   viralScore: 84,
   views: 1200000,
   likes: 84000,

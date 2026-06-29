@@ -241,7 +241,18 @@ Ensure the response is a valid JSON array of word objects and contains nothing e
   }
 
   try {
-    const subtitles = JSON.parse(text.trim());
+    let cleanText = text.trim();
+    if (cleanText.startsWith("```json")) {
+      cleanText = cleanText.substring(7);
+    } else if (cleanText.startsWith("```")) {
+      cleanText = cleanText.substring(3);
+    }
+    if (cleanText.endsWith("```")) {
+      cleanText = cleanText.substring(0, cleanText.length - 3);
+    }
+    cleanText = cleanText.trim();
+
+    const subtitles = JSON.parse(cleanText);
     if (!Array.isArray(subtitles)) {
       throw new Error("Gemini API transcription response is not a JSON array");
     }
@@ -329,7 +340,7 @@ export async function runMockPipeline(videoId: string) {
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "VOICE_DONE", voiceUrl: "https://storage.googleapis.com/mock-reelforge-bucket/mock-voiceover.mp3" }
+      data: { status: "VOICE_DONE", voiceUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" }
     });
     await createJobProgress(videoId, "VOICE_DONE", 30);
     await sleep(1000);
@@ -355,7 +366,7 @@ export async function runMockPipeline(videoId: string) {
     await createJobProgress(videoId, "CAPTIONS_DONE", 60);
     await sleep(1000);
 
-    await prisma.video.update({ data: { musicUrl: "https://storage.googleapis.com/mock-reelforge-bucket/mock-background-ambient.mp3" }, where: { id: videoId } });
+    await prisma.video.update({ data: { musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3" }, where: { id: videoId } });
     await createJobProgress(videoId, "RENDERING", 75);
     await sleep(1000);
 
@@ -364,7 +375,7 @@ export async function runMockPipeline(videoId: string) {
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "COMPLETED", videoUrl: "https://storage.googleapis.com/mock-reelforge-bucket/rendered-result-sahara.mp4" }
+      data: { status: "COMPLETED", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" }
     });
     await createJobProgress(videoId, "COMPLETED", 100);
     console.log(`[MOCK WORKER] Pipeline completed successfully for Video ${videoId}!`);

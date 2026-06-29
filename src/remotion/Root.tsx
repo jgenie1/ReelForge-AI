@@ -28,7 +28,7 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1920}
         defaultProps={{
-          voiceUrl: "https://pub-reelforge.r2.dev/mock-voiceover.mp3",
+          voiceUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
           musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
           subtitles: defaultSubtitles,
           imageUrls: [

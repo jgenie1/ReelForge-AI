@@ -181,7 +181,7 @@ export default function ApiDocsPage() {
 {`{
   "status": "COMPLETED",
   "progress": 100,
-  "videoUrl": "https://pub-reelforge.r2.dev/rendered-result-sahara.mp4",
+  "videoUrl": "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
   "viralScore": 84,
   "suggestions": [
     "Shorten hook introduction by 0.8s",

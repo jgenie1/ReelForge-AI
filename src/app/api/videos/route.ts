@@ -23,12 +23,12 @@ export async function GET(req: Request) {
 
     // Default mock backups
     const mockVideos = [
-      { id: 'vid-1', title: 'Le secret terrifiant du Sahara', niche: 'Science Insolite', style: 'Cinématique SDXL', duration: 30, status: 'COMPLETED', videoUrl: 'https://pub-reelforge.r2.dev/rendered-result-sahara.mp4', viralScore: 84, views: 1200000, likes: 84000, createdAt: new Date(Date.now() - 2 * 3600000) },
+      { id: 'vid-1', title: 'Le secret terrifiant du Sahara', niche: 'Science Insolite', style: 'Cinématique SDXL', duration: 30, status: 'COMPLETED', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', viralScore: 84, views: 1200000, likes: 84000, createdAt: new Date(Date.now() - 2 * 3600000) },
       { id: 'vid-2', title: "L'Arche Perdue de Salomon", niche: 'Histoires Bibliques', style: 'Illustration', duration: 45, status: 'RENDERING', videoUrl: null, viralScore: 78, views: 0, likes: 0, progress: 75, createdAt: new Date(Date.now() - 5 * 60000) },
-      { id: 'vid-3', title: "L'Ombre d'Anubis - Épisode 1", niche: 'Mythologie', style: 'Dark Fantasy', duration: 30, status: 'COMPLETED', videoUrl: 'https://pub-reelforge.r2.dev/rendered-result-anubis.mp4', viralScore: 92, views: 340000, likes: 21000, createdAt: new Date(Date.now() - 24 * 3600000) },
+      { id: 'vid-3', title: "L'Ombre d'Anubis - Épisode 1", niche: 'Mythologie', style: 'Dark Fantasy', duration: 30, status: 'COMPLETED', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', viralScore: 92, views: 340000, likes: 21000, createdAt: new Date(Date.now() - 24 * 3600000) },
       { id: 'vid-4', title: "L'Investissement Passif en 2026", niche: 'Finance & Richesse', style: 'Realistic', duration: 15, status: 'FAILED', videoUrl: null, viralScore: 45, views: 0, likes: 0, createdAt: new Date(Date.now() - 48 * 3600000) },
-      { id: 'vid-5', title: "5 Lois Secrètes de l'Argent", niche: 'Finance & Richesse', style: 'Cinématique SDXL', duration: 30, status: 'COMPLETED', videoUrl: 'https://pub-reelforge.r2.dev/vid5.mp4', viralScore: 88, views: 3400000, likes: 210000, createdAt: new Date(Date.now() - 72 * 3600000) },
-      { id: 'vid-6', title: "Les Créatures du Marais Haïtien", niche: 'Culture Haïtienne', style: 'Dark Fantasy', duration: 45, status: 'COMPLETED', videoUrl: 'https://pub-reelforge.r2.dev/vid6.mp4', viralScore: 79, views: 156000, likes: 12000, createdAt: new Date(Date.now() - 4 * 24 * 3600000) },
+      { id: 'vid-5', title: "5 Lois Secrètes de l'Argent", niche: 'Finance & Richesse', style: 'Cinématique SDXL', duration: 30, status: 'COMPLETED', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', viralScore: 88, views: 3400000, likes: 210000, createdAt: new Date(Date.now() - 72 * 3600000) },
+      { id: 'vid-6', title: "Les Créatures du Marais Haïtien", niche: 'Culture Haïtienne', style: 'Dark Fantasy', duration: 45, status: 'COMPLETED', videoUrl: 'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4', viralScore: 79, views: 156000, likes: 12000, createdAt: new Date(Date.now() - 4 * 24 * 3600000) },
     ];
 
     try {
