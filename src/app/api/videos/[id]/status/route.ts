@@ -37,7 +37,7 @@ export async function GET(
         status,
         progress,
         error: null,
-        videoUrl: progress >= 100 ? "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" : null,
+        videoUrl: progress >= 100 ? "https://www.w3schools.com/html/mov_bbb.mp4" : null,
         voiceUrl: progress >= 25 ? "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3" : null,
         musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
         subtitles: progress >= 80 ? [
@@ -102,7 +102,7 @@ export async function GET(
         status: "COMPLETED",
         progress: 100,
         error: null,
-        videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4",
         voiceUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
         musicUrl: "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
         subtitles: [

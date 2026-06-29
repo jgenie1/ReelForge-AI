@@ -375,7 +375,7 @@ export async function runMockPipeline(videoId: string) {
 
     await prisma.video.update({
       where: { id: videoId },
-      data: { status: "COMPLETED", videoUrl: "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4" }
+      data: { status: "COMPLETED", videoUrl: "https://www.w3schools.com/html/mov_bbb.mp4" }
     });
     await createJobProgress(videoId, "COMPLETED", 100);
     console.log(`[MOCK WORKER] Pipeline completed successfully for Video ${videoId}!`);
