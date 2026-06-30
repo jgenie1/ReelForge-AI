@@ -94,7 +94,7 @@ export async function POST(req: Request) {
             script: customScript || "En attente du script Gemini API...",
             niche,
             style,
-            tone,
+            tone: tone || "Neutral",
             duration,
             language,
             status: "PENDING"
