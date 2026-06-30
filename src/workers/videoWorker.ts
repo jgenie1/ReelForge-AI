@@ -44,21 +44,28 @@ async function callGeminiScript(
   tone: string,
   duration: number,
   language: string
-): Promise<string> {
+): Promise<{ script: string; visualPrompts: string[] }> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
     throw new Error("Missing GEMINI_API_KEY environment variable");
   }
 
-  const prompt = `Write a short narration script for a 9:16 vertical video of approximately ${duration} seconds in the "${niche}" niche.
+  const prompt = `You are a viral video scriptwriter and visual director. Write a short narration script for a 9:16 vertical video of approximately ${duration} seconds in the "${niche}" niche.
 Subject/Topic: ${topic}
 Tone: ${tone}
 Language: ${language}
 
-Requirements:
-- Output ONLY the voiceover narrative text.
-- Do NOT include any scene descriptions, stage directions, bracketed comments, tags, or formatting.
-- The script should be engaging, formatted as a continuous spoken paragraph, and fit the ${duration}-second limit.`;
+Your response must be a JSON object with this exact structure:
+{
+  "script": "The full voiceover narration text (continuous, engaging spoken paragraph in the target language), matching the target duration.",
+  "visualPrompts": [
+    "Prompt 1: A highly detailed, descriptive scene description in English for an image generator (like Imagen 3) illustrating the beginning of the script.",
+    "Prompt 2: A highly detailed scene description in English for the middle of the script.",
+    "Prompt 3: A highly detailed scene description in English for the end of the script."
+  ]
+}
+
+Make sure the visualPrompts are described in English, very rich, cinematic, and avoid abstract concepts (e.g. use "A mysterious circular rock formation in the middle of a golden sand desert, seen from space" instead of "Geology mystery"). Do not return anything other than the JSON object.`;
 
   const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
     method: "POST",
@@ -67,6 +74,9 @@ Requirements:
     },
     body: JSON.stringify({
       contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        responseMimeType: "application/json"
+      }
     }),
   });
 
@@ -81,7 +91,27 @@ Requirements:
     throw new Error("No script text returned from Gemini API");
   }
 
-  return text.trim();
+  try {
+    let cleanText = text.trim();
+    if (cleanText.startsWith("```json")) {
+      cleanText = cleanText.substring(7);
+    } else if (cleanText.startsWith("```")) {
+      cleanText = cleanText.substring(3);
+    }
+    if (cleanText.endsWith("```")) {
+      cleanText = cleanText.substring(0, cleanText.length - 3);
+    }
+    cleanText = cleanText.trim();
+    
+    const parsed = JSON.parse(cleanText);
+    return {
+      script: parsed.script || "",
+      visualPrompts: Array.isArray(parsed.visualPrompts) ? parsed.visualPrompts : []
+    };
+  } catch (err: any) {
+    console.error("Failed to parse Gemini script JSON response:", text);
+    throw new Error(`Gemini script parse error: ${err.message}`);
+  }
 }
 
 // 2. ElevenLabs TTS helper
@@ -177,12 +207,22 @@ async function generateSingleImage(promptText: string, style: string, index: num
   return uploadToFirebase(imageBuffer, imageKey, "image/jpeg");
 }
 
-async function callImagenAPI(script: string, style: string, videoId: string): Promise<string[]> {
-  const segments = segmentScript(script, 3);
-  console.log(`[WORKER] Generating ${segments.length} images in parallel via Gemini Imagen...`);
+async function callImagenAPI(promptsOrScript: string[] | string, style: string, videoId: string): Promise<string[]> {
+  let prompts: string[] = [];
+  if (Array.isArray(promptsOrScript)) {
+    prompts = promptsOrScript;
+  } else {
+    prompts = segmentScript(promptsOrScript, 3);
+  }
+  
+  if (prompts.length === 0) {
+    prompts = ["A stunning visual masterpiece representing the video theme"];
+  }
+
+  console.log(`[WORKER] Generating ${prompts.length} images in parallel via Gemini Imagen...`);
   return Promise.all(
-    segments.map((promptText, idx) => {
-      console.log(`[WORKER] Starting image generation ${idx + 1}/${segments.length}`);
+    prompts.map((promptText, idx) => {
+      console.log(`[WORKER] Starting image generation ${idx + 1}/${prompts.length}`);
       return generateSingleImage(promptText, style, idx + 1, videoId);
     })
   );
@@ -402,8 +442,11 @@ export async function runProductionPipeline(
   const { topic, niche, style, tone, duration, language, voice } = data;
   try {
     // 1. Generate Script
-    console.log(`[WORKER] Step 1: Generating script via Gemini...`);
-    const script = await callGeminiScript(topic, niche, tone, duration, language);
+    console.log(`[WORKER] Step 1: Generating script and visual prompts via Gemini...`);
+    const scriptResult = await callGeminiScript(topic, niche, tone, duration, language);
+    const script = scriptResult.script;
+    const visualPrompts = scriptResult.visualPrompts;
+
     await prisma.video.update({
       where: { id: videoId },
       data: { script, status: "SCRIPT_DONE", viralScore: Math.floor(Math.random() * 20) + 75 }
@@ -425,7 +468,7 @@ export async function runProductionPipeline(
 
     // 3. Generate Images
     console.log(`[WORKER] Step 3: Generating images via Gemini Imagen...`);
-    const imageUrls = await callImagenAPI(script, style, videoId);
+    const imageUrls = await callImagenAPI(visualPrompts, style, videoId);
     await prisma.video.update({
       where: { id: videoId },
       data: { status: "IMAGES_DONE" }
